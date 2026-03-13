@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.Runtime.Versioning;
 using System.Windows;
 using System.Windows.Media;
@@ -10,13 +11,24 @@ using TaoMaster.Core.RemoteSources;
 using TaoMaster.Core.Services;
 using TaoMaster.Core.State;
 using WpfButton = System.Windows.Controls.Button;
+using WpfComboBox = System.Windows.Controls.ComboBox;
 using WpfListBox = System.Windows.Controls.ListBox;
 using WpfSelectionChangedEventArgs = System.Windows.Controls.SelectionChangedEventArgs;
 using WpfTextBlock = System.Windows.Controls.TextBlock;
 using WpfTextBox = System.Windows.Controls.TextBox;
+using MediaColor = System.Windows.Media.Color;
 using Path = System.IO.Path;
 
 namespace TaoMaster.App;
+
+internal enum AppSection
+{
+    Dashboard,
+    Versions,
+    Projects,
+    Diagnostics,
+    Settings
+}
 
 [SupportedOSPlatform("windows")]
 public partial class MainWindow : Window
@@ -39,8 +51,10 @@ public partial class MainWindow : Window
     private ManagerState _state;
     private DoctorReport? _lastDoctorReport;
     private AppLocalizer _localizer;
+    private readonly ObservableCollection<string> _activityEntries = [];
     private bool _hasLoaded;
     private bool _suppressLanguageSelectionChanged;
+    private AppSection _currentSection = AppSection.Dashboard;
 
     public MainWindow()
     {
@@ -68,7 +82,9 @@ public partial class MainWindow : Window
         _localizer = new AppLocalizer(AppLocalizer.DetectDefaultLanguage(System.Globalization.CultureInfo.CurrentUICulture));
 
         InitializeComponent();
+        ActivityListBox.ItemsSource = _activityEntries;
         InitializeLanguageSelector();
+        ApplyCurrentSection();
         ApplyLocalization();
         RefreshStateBindings();
         SetStatus(_localizer["readyStatus"]);
@@ -130,6 +146,7 @@ public partial class MainWindow : Window
         ProductNameTextBlock.Text = _localizer.GetProductDisplayName();
         ProductVersionTextBlock.Text = ProductVersionLabel;
         ApplyLocalizationRecursive(this);
+        ApplyCurrentSection();
 
         if (_lastDoctorReport is null)
         {
@@ -206,23 +223,39 @@ public partial class MainWindow : Window
 
     private void RefreshStateBindings(string? preferredJdkId = null, string? preferredMavenId = null)
     {
+        SidebarWorkspaceTextBlock.Text = _layout.RootDirectory;
+        SidebarScopeTextBlock.Text = _localizer["scopeGlobal"];
         WorkspaceRootTextBlock.Text = _layout.RootDirectory;
         StateFileTextBlock.Text = _layout.StateFile;
+        InstallRootTextBlock.Text = _state.Settings.InstallRoot;
+        PathModeTextBlock.Text = _state.Settings.PathMode;
+        AppVersionTextBlock.Text = ProductInfo.Version;
 
         var selection = _selectionResolver.Resolve(_state);
-
-        ActiveJdkTextBlock.Text = selection.Jdk?.DisplayName ?? _localizer["nonePlaceholder"];
-        JavaHomeTextBlock.Text = selection.Jdk?.HomeDirectory ?? _localizer["nonePlaceholder"];
-        ActiveMavenTextBlock.Text = selection.Maven?.DisplayName ?? _localizer["nonePlaceholder"];
-        MavenHomeTextBlock.Text = selection.Maven?.HomeDirectory ?? _localizer["nonePlaceholder"];
+        DashboardCurrentJdkTextBlock.Text = selection.Jdk?.DisplayName ?? _localizer["nonePlaceholder"];
+        DashboardCurrentJdkPathTextBlock.Text = selection.Jdk?.HomeDirectory ?? _localizer["dashboardNoJdkDetail"];
+        DashboardCurrentMavenTextBlock.Text = selection.Maven?.DisplayName ?? _localizer["nonePlaceholder"];
+        DashboardCurrentMavenPathTextBlock.Text = selection.Maven?.HomeDirectory ?? _localizer["dashboardNoMavenDetail"];
+        DashboardScopeTextBlock.Text = _localizer["scopeGlobal"];
+        DashboardScopeDetailTextBlock.Text = _localizer["dashboardScopeDetail"];
+        ProjectsScopeTextBlock.Text = _localizer["projectsScopeValue"];
+        ProjectsScopeDetailTextBlock.Text = _localizer["projectsScopeDetail"];
+        ProjectsRulesTextBlock.Text = _localizer["projectsRulesValue"];
+        HeaderScopeBadgeTextBlock.Text = _localizer["scopeGlobal"];
 
         JdkListBox.ItemsSource = _state.Jdks.ToList();
         MavenListBox.ItemsSource = _state.Mavens.ToList();
+        DashboardJdkComboBox.ItemsSource = _state.Jdks.ToList();
+        DashboardMavenComboBox.ItemsSource = _state.Mavens.ToList();
 
         SelectInstallation(JdkListBox, _state.Jdks, preferredJdkId ?? _state.ActiveSelection.JdkId);
         SelectInstallation(MavenListBox, _state.Mavens, preferredMavenId ?? _state.ActiveSelection.MavenId);
+        SelectInstallationInComboBox(DashboardJdkComboBox, _state.Jdks, preferredJdkId ?? _state.ActiveSelection.JdkId);
+        SelectInstallationInComboBox(DashboardMavenComboBox, _state.Mavens, preferredMavenId ?? _state.ActiveSelection.MavenId);
 
         PowerShellScriptTextBox.Text = BuildShellPreviewText("powershell");
+        EnvironmentSnapshotTextBox.Text = BuildEnvironmentSnapshot(selection);
+        RefreshEnvironmentHealth(selection);
 
         if (_lastDoctorReport is not null)
         {
@@ -247,6 +280,235 @@ public partial class MainWindow : Window
 
         listBox.SelectedItem = installations.FirstOrDefault(
             installation => installation.Id.Equals(installationId, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static void SelectInstallationInComboBox(
+        WpfComboBox comboBox,
+        IEnumerable<ManagedInstallation> installations,
+        string? installationId)
+    {
+        var resolved = string.IsNullOrWhiteSpace(installationId)
+            ? installations.FirstOrDefault()
+            : installations.FirstOrDefault(installation => installation.Id.Equals(installationId, StringComparison.OrdinalIgnoreCase));
+
+        comboBox.SelectedItem = resolved;
+    }
+
+    private void ApplyCurrentSection()
+    {
+        DashboardPage.Visibility = _currentSection == AppSection.Dashboard ? Visibility.Visible : Visibility.Collapsed;
+        VersionsPage.Visibility = _currentSection == AppSection.Versions ? Visibility.Visible : Visibility.Collapsed;
+        ProjectsPage.Visibility = _currentSection == AppSection.Projects ? Visibility.Visible : Visibility.Collapsed;
+        DiagnosticsPage.Visibility = _currentSection == AppSection.Diagnostics ? Visibility.Visible : Visibility.Collapsed;
+        SettingsPage.Visibility = _currentSection == AppSection.Settings ? Visibility.Visible : Visibility.Collapsed;
+
+        PageTitleTextBlock.Text = _localizer[GetSectionTitleKey(_currentSection)];
+        PageDescriptionTextBlock.Text = _localizer[GetSectionDescriptionKey(_currentSection)];
+
+        ApplyNavigationButtonState(DashboardNavButton, _currentSection == AppSection.Dashboard);
+        ApplyNavigationButtonState(VersionsNavButton, _currentSection == AppSection.Versions);
+        ApplyNavigationButtonState(ProjectsNavButton, _currentSection == AppSection.Projects);
+        ApplyNavigationButtonState(DiagnosticsNavButton, _currentSection == AppSection.Diagnostics);
+        ApplyNavigationButtonState(SettingsNavButton, _currentSection == AppSection.Settings);
+    }
+
+    private static string GetSectionTitleKey(AppSection section) =>
+        section switch
+        {
+            AppSection.Dashboard => "pageDashboardTitle",
+            AppSection.Versions => "pageVersionsTitle",
+            AppSection.Projects => "pageProjectsTitle",
+            AppSection.Diagnostics => "pageDiagnosticsTitle",
+            AppSection.Settings => "pageSettingsTitle",
+            _ => "pageDashboardTitle"
+        };
+
+    private static string GetSectionDescriptionKey(AppSection section) =>
+        section switch
+        {
+            AppSection.Dashboard => "pageDashboardDescription",
+            AppSection.Versions => "pageVersionsDescription",
+            AppSection.Projects => "pageProjectsDescription",
+            AppSection.Diagnostics => "pageDiagnosticsDescription",
+            AppSection.Settings => "pageSettingsDescription",
+            _ => "pageDashboardDescription"
+        };
+
+    private void ApplyNavigationButtonState(WpfButton button, bool isActive)
+    {
+        button.Background = isActive
+            ? new SolidColorBrush(MediaColor.FromRgb(30, 138, 102))
+            : System.Windows.Media.Brushes.Transparent;
+        button.Foreground = isActive
+            ? System.Windows.Media.Brushes.White
+            : new SolidColorBrush(MediaColor.FromRgb(199, 213, 206));
+    }
+
+    private void RefreshEnvironmentHealth(ActiveToolchainSelection selection)
+    {
+        var pathHealthOk = selection.Jdk is not null || selection.Maven is not null;
+        var userPath = _environmentService.GetUserVariable(EnvironmentVariableNames.Path);
+        if (selection.Jdk is not null)
+        {
+            pathHealthOk &= userPath?.Contains("%JAVA_HOME%\\bin", StringComparison.OrdinalIgnoreCase) == true;
+        }
+
+        if (selection.Maven is not null)
+        {
+            pathHealthOk &= userPath?.Contains("%MAVEN_HOME%\\bin", StringComparison.OrdinalIgnoreCase) == true;
+        }
+
+        var doctorPasses = _lastDoctorReport?.Checks.Count(check => check.Status == DoctorCheckStatus.Pass) ?? 0;
+        var doctorWarns = _lastDoctorReport?.Checks.Count(check => check.Status == DoctorCheckStatus.Warn) ?? 0;
+        var doctorFails = _lastDoctorReport?.Checks.Count(check => check.Status == DoctorCheckStatus.Fail) ?? 0;
+
+        ApplyHealthState(
+            JavaHealthBadgeBorder,
+            JavaHealthBadgeTextBlock,
+            selection.Jdk is not null,
+            selection.Jdk is not null ? "healthReady" : "healthMissing",
+            JavaHealthHintTextBlock,
+            selection.Jdk?.DisplayName ?? _localizer["healthSelectJdkHint"]);
+
+        ApplyHealthState(
+            MavenHealthBadgeBorder,
+            MavenHealthBadgeTextBlock,
+            selection.Maven is not null,
+            selection.Maven is not null ? "healthReady" : "healthMissing",
+            MavenHealthHintTextBlock,
+            selection.Maven?.DisplayName ?? _localizer["healthSelectMavenHint"]);
+
+        ApplyHealthState(
+            PathHealthBadgeBorder,
+            PathHealthBadgeTextBlock,
+            pathHealthOk,
+            pathHealthOk ? "healthReady" : "healthAttention",
+            PathHealthHintTextBlock,
+            pathHealthOk ? _localizer["healthPathReadyHint"] : _localizer["healthPathCheckHint"]);
+
+        if (_lastDoctorReport is null)
+        {
+            ApplyHealthState(
+                DoctorHealthBadgeBorder,
+                DoctorHealthBadgeTextBlock,
+                false,
+                "healthPending",
+                DoctorHealthHintTextBlock,
+                _localizer["healthDoctorPendingHint"]);
+
+            ApplyHeaderStatus("healthPending", _localizer["healthDoctorPendingHint"]);
+            ApplyDashboardEnvironment("healthPending", _localizer["healthDoctorPendingHint"]);
+            DashboardInsightTextBlock.Text = _localizer["dashboardInsightPending"];
+            return;
+        }
+
+        var doctorOk = doctorFails == 0 && doctorWarns == 0;
+        var doctorKey = doctorFails > 0
+            ? "healthError"
+            : doctorWarns > 0
+                ? "healthAttention"
+                : "healthReady";
+        var doctorHint = doctorFails > 0
+            ? _localizer.Format("healthDoctorFailureHint", doctorFails)
+            : doctorWarns > 0
+                ? _localizer.Format("healthDoctorWarningHint", doctorWarns)
+                : _localizer.Format("healthDoctorReadyHint", doctorPasses);
+
+        ApplyHealthState(
+            DoctorHealthBadgeBorder,
+            DoctorHealthBadgeTextBlock,
+            doctorOk,
+            doctorKey,
+            DoctorHealthHintTextBlock,
+            doctorHint);
+
+        ApplyHeaderStatus(doctorKey, doctorHint);
+        ApplyDashboardEnvironment(doctorKey, doctorHint);
+        DashboardInsightTextBlock.Text = BuildDashboardInsight();
+    }
+
+    private void ApplyDashboardEnvironment(string statusKey, string detail)
+    {
+        DashboardEnvironmentTextBlock.Text = _localizer[statusKey];
+        DashboardEnvironmentDetailTextBlock.Text = detail;
+        ApplyBadgeTone(DashboardEnvironmentBadgeBorder, DashboardEnvironmentTextBlock, statusKey);
+    }
+
+    private void ApplyHeaderStatus(string statusKey, string detail)
+    {
+        HeaderEnvironmentBadgeTextBlock.Text = _localizer[statusKey];
+        HeaderEnvironmentHintTextBlock.Text = detail;
+        ApplyBadgeTone(HeaderEnvironmentBadgeBorder, HeaderEnvironmentBadgeTextBlock, statusKey);
+    }
+
+    private void ApplyHealthState(
+        System.Windows.Controls.Border border,
+        WpfTextBlock textBlock,
+        bool success,
+        string statusKey,
+        WpfTextBlock hintTextBlock,
+        string hint)
+    {
+        textBlock.Text = _localizer[statusKey];
+        hintTextBlock.Text = hint;
+        ApplyBadgeTone(border, textBlock, success ? "healthReady" : statusKey);
+    }
+
+    private static (MediaColor Background, MediaColor Foreground) GetBadgeColors(string statusKey) =>
+        statusKey switch
+        {
+            "healthReady" => (MediaColor.FromRgb(216, 239, 230), MediaColor.FromRgb(30, 138, 102)),
+            "healthAttention" => (MediaColor.FromRgb(246, 235, 214), MediaColor.FromRgb(208, 138, 47)),
+            "healthError" => (MediaColor.FromRgb(245, 226, 221), MediaColor.FromRgb(196, 81, 64)),
+            _ => (MediaColor.FromRgb(230, 238, 247), MediaColor.FromRgb(44, 108, 166))
+        };
+
+    private static void ApplyBadgeTone(System.Windows.Controls.Border border, WpfTextBlock textBlock, string statusKey)
+    {
+        var (background, foreground) = GetBadgeColors(statusKey);
+        border.Background = new SolidColorBrush(background);
+        textBlock.Foreground = new SolidColorBrush(foreground);
+    }
+
+    private string BuildEnvironmentSnapshot(ActiveToolchainSelection selection)
+    {
+        var userJavaHome = _environmentService.GetUserVariable(EnvironmentVariableNames.JavaHome) ?? _localizer["nonePlaceholder"];
+        var userMavenHome = _environmentService.GetUserVariable(EnvironmentVariableNames.MavenHome) ?? _localizer["nonePlaceholder"];
+        var userM2Home = _environmentService.GetUserVariable(EnvironmentVariableNames.M2Home) ?? _localizer["nonePlaceholder"];
+        var userPath = _environmentService.GetUserVariable(EnvironmentVariableNames.Path) ?? _localizer["nonePlaceholder"];
+
+        return string.Join(Environment.NewLine, new[]
+        {
+            $"{_localizer["snapshotScopeLabel"]}: {_localizer["scopeGlobal"]}",
+            $"{_localizer["snapshotSelectedJdkLabel"]}: {selection.Jdk?.Id ?? _localizer["nonePlaceholder"]}",
+            $"{_localizer["snapshotSelectedMavenLabel"]}: {selection.Maven?.Id ?? _localizer["nonePlaceholder"]}",
+            $"{_localizer["snapshotJavaHomeLabel"]}: {userJavaHome}",
+            $"{_localizer["snapshotMavenHomeLabel"]}: {userMavenHome}",
+            $"{_localizer["snapshotM2HomeLabel"]}: {userM2Home}",
+            $"{_localizer["snapshotPathLabel"]}: {userPath}"
+        });
+    }
+
+    private string BuildDashboardInsight()
+    {
+        if (_lastDoctorReport is null)
+        {
+            return _localizer["dashboardInsightPending"];
+        }
+
+        var firstFailure = _lastDoctorReport.Checks.FirstOrDefault(check => check.Status == DoctorCheckStatus.Fail);
+        if (firstFailure is not null)
+        {
+            return $"{firstFailure.Code}: {_localizer.GetDoctorMessage(firstFailure.Code, firstFailure.Status)}";
+        }
+
+        var firstWarning = _lastDoctorReport.Checks.FirstOrDefault(check => check.Status == DoctorCheckStatus.Warn);
+        if (firstWarning is not null)
+        {
+            return $"{firstWarning.Code}: {_localizer.GetDoctorMessage(firstWarning.Code, firstWarning.Status)}";
+        }
+
+        return _localizer["dashboardInsightHealthy"];
     }
 
     private async Task RefreshRemoteVersionsCoreAsync()
@@ -333,6 +595,26 @@ public partial class MainWindow : Window
     private void SetStatus(string message)
     {
         StatusTextBlock.Text = message;
+        if (!string.IsNullOrWhiteSpace(message))
+        {
+            PushActivity(message);
+        }
+    }
+
+    private void PushActivity(string message)
+    {
+        var entry = $"{DateTime.Now:HH:mm}  {message}";
+        if (_activityEntries.Count > 0
+            && _activityEntries[0].EndsWith(message, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _activityEntries.Insert(0, entry);
+        while (_activityEntries.Count > 8)
+        {
+            _activityEntries.RemoveAt(_activityEntries.Count - 1);
+        }
     }
 
     private void InvalidateDoctorOutput()
@@ -351,6 +633,36 @@ public partial class MainWindow : Window
             _localizer["warningTitle"],
             MessageBoxButton.OK,
             MessageBoxImage.Warning);
+    }
+
+    private void OnDashboardNavClicked(object sender, RoutedEventArgs e)
+    {
+        _currentSection = AppSection.Dashboard;
+        ApplyCurrentSection();
+    }
+
+    private void OnVersionsNavClicked(object sender, RoutedEventArgs e)
+    {
+        _currentSection = AppSection.Versions;
+        ApplyCurrentSection();
+    }
+
+    private void OnProjectsNavClicked(object sender, RoutedEventArgs e)
+    {
+        _currentSection = AppSection.Projects;
+        ApplyCurrentSection();
+    }
+
+    private void OnDiagnosticsNavClicked(object sender, RoutedEventArgs e)
+    {
+        _currentSection = AppSection.Diagnostics;
+        ApplyCurrentSection();
+    }
+
+    private void OnSettingsNavClicked(object sender, RoutedEventArgs e)
+    {
+        _currentSection = AppSection.Settings;
+        ApplyCurrentSection();
     }
 
     private void OnBrowseJdkImportClicked(object sender, RoutedEventArgs e)
@@ -454,6 +766,28 @@ public partial class MainWindow : Window
             });
     }
 
+    private async void OnDashboardUseSelectedJdkClicked(object sender, RoutedEventArgs e)
+    {
+        if (DashboardJdkComboBox.SelectedItem is not ManagedInstallation installation)
+        {
+            ShowValidationWarning("validationSelectJdk");
+            return;
+        }
+
+        await SwitchInstallationAsync(ToolchainKind.Jdk, installation);
+    }
+
+    private async void OnDashboardUseSelectedMavenClicked(object sender, RoutedEventArgs e)
+    {
+        if (DashboardMavenComboBox.SelectedItem is not ManagedInstallation installation)
+        {
+            ShowValidationWarning("validationSelectMaven");
+            return;
+        }
+
+        await SwitchInstallationAsync(ToolchainKind.Maven, installation);
+    }
+
     private async void OnUseSelectedJdkClicked(object sender, RoutedEventArgs e)
     {
         if (JdkListBox.SelectedItem is not ManagedInstallation installation)
@@ -462,23 +796,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        await ExecuteBusyAsync(
-            "busySwitchingJdk",
-            async () =>
-            {
-                var updatedState = _state with
-                {
-                    ActiveSelection = _state.ActiveSelection with { JdkId = installation.Id }
-                };
-
-                await Task.Run(() => _activationService.Apply(updatedState));
-                await Task.Run(() => _stateStore.Save(_layout, updatedState));
-
-                _state = updatedState;
-                InvalidateDoctorOutput();
-                RefreshStateBindings(installation.Id, GetSelectedInstallationId(MavenListBox));
-                return _localizer.Format("jdkSwitchedStatus", installation.DisplayName);
-            });
+        await SwitchInstallationAsync(ToolchainKind.Jdk, installation);
     }
 
     private async void OnUseSelectedMavenClicked(object sender, RoutedEventArgs e)
@@ -489,13 +807,26 @@ public partial class MainWindow : Window
             return;
         }
 
+        await SwitchInstallationAsync(ToolchainKind.Maven, installation);
+    }
+
+    private async Task SwitchInstallationAsync(ToolchainKind kind, ManagedInstallation installation)
+    {
         await ExecuteBusyAsync(
-            "busySwitchingMaven",
+            kind == ToolchainKind.Jdk ? "busySwitchingJdk" : "busySwitchingMaven",
             async () =>
             {
-                var updatedState = _state with
+                var updatedState = kind switch
                 {
-                    ActiveSelection = _state.ActiveSelection with { MavenId = installation.Id }
+                    ToolchainKind.Jdk => _state with
+                    {
+                        ActiveSelection = _state.ActiveSelection with { JdkId = installation.Id }
+                    },
+                    ToolchainKind.Maven => _state with
+                    {
+                        ActiveSelection = _state.ActiveSelection with { MavenId = installation.Id }
+                    },
+                    _ => _state
                 };
 
                 await Task.Run(() => _activationService.Apply(updatedState));
@@ -503,8 +834,13 @@ public partial class MainWindow : Window
 
                 _state = updatedState;
                 InvalidateDoctorOutput();
-                RefreshStateBindings(GetSelectedInstallationId(JdkListBox), installation.Id);
-                return _localizer.Format("mavenSwitchedStatus", installation.DisplayName);
+                RefreshStateBindings(
+                    kind == ToolchainKind.Jdk ? installation.Id : GetSelectedInstallationId(JdkListBox),
+                    kind == ToolchainKind.Maven ? installation.Id : GetSelectedInstallationId(MavenListBox));
+
+                return _localizer.Format(
+                    kind == ToolchainKind.Jdk ? "jdkSwitchedStatus" : "mavenSwitchedStatus",
+                    installation.DisplayName);
             });
     }
 
