@@ -121,6 +121,8 @@ public partial class MainWindow : Window
 
                 return _localizer.Format("workspaceLoadedStatus", _state.Jdks.Count, _state.Mavens.Count);
             });
+
+        RefreshLocalizedView();
     }
 
     private static AppLocalizer CreateInitialLocalizer(ManagerState state)
@@ -130,7 +132,7 @@ public partial class MainWindow : Window
             return new AppLocalizer(persistedLanguage);
         }
 
-        return new AppLocalizer(AppLanguage.English);
+        return new AppLocalizer(AppLanguage.SimplifiedChinese);
     }
 
     private void ApplyActivationWithShellIntegration(ManagerState state)
@@ -156,7 +158,6 @@ public partial class MainWindow : Window
         }
 
         ApplyLanguage(option.Language, persistPreference: true);
-        RefreshStateBindings(GetSelectedInstallationId(JdkListBox), GetSelectedInstallationId(MavenListBox));
         SetStatus(_localizer.Format("languageChangedStatus", option.DisplayName));
     }
 
@@ -172,11 +173,6 @@ public partial class MainWindow : Window
         {
             DoctorOutputTextBox.Text = _localizer["doctorPlaceholder"];
         }
-
-        if (SuccessNoticeBorder.Visibility == Visibility.Visible)
-        {
-            SuccessNoticeTitleTextBlock.Text = _localizer["successNoticeTitle"];
-        }
     }
 
     private void ApplyLanguage(AppLanguage language, bool persistPreference)
@@ -184,11 +180,18 @@ public partial class MainWindow : Window
         _localizer = new AppLocalizer(language);
         SelectLanguageOption(language);
         ApplyLocalization();
+        RefreshStateBindings(GetSelectedInstallationId(JdkListBox), GetSelectedInstallationId(MavenListBox));
 
         if (persistPreference)
         {
             PersistLanguagePreference(language);
         }
+    }
+
+    private void RefreshLocalizedView()
+    {
+        ApplyLocalization();
+        RefreshStateBindings(GetSelectedInstallationId(JdkListBox), GetSelectedInstallationId(MavenListBox));
     }
 
     private void SelectLanguageOption(AppLanguage language)
@@ -633,10 +636,10 @@ public partial class MainWindow : Window
 
     private async Task RefreshRemoteVersionsCoreAsync()
     {
-        var currentJdkVersion = RemoteJdkVersionComboBox.SelectedItem as int?;
+        var currentJdkVersion = RemoteJdkVersionComboBox.SelectedItem as RemotePackageDescriptor;
         var currentMavenVersion = RemoteMavenVersionComboBox.SelectedItem as string;
 
-        var jdkTask = _temurinSource.GetAvailableFeatureReleasesAsync(CancellationToken.None);
+        var jdkTask = _temurinSource.GetLatestPackagesByFeatureAsync("x64", CancellationToken.None);
         var mavenTask = _mavenSource.GetCurrentVersionsAsync(CancellationToken.None);
 
         await Task.WhenAll(jdkTask, mavenTask);
@@ -645,8 +648,9 @@ public partial class MainWindow : Window
         var mavenVersions = (await mavenTask).ToList();
 
         RemoteJdkVersionComboBox.ItemsSource = jdkVersions;
-        RemoteJdkVersionComboBox.SelectedItem = currentJdkVersion.HasValue && jdkVersions.Contains(currentJdkVersion.Value)
-            ? currentJdkVersion.Value
+        RemoteJdkVersionComboBox.SelectedItem = currentJdkVersion is not null
+                                                 && jdkVersions.Any(package => package.Version.Equals(currentJdkVersion.Version, StringComparison.OrdinalIgnoreCase))
+            ? jdkVersions.First(package => package.Version.Equals(currentJdkVersion.Version, StringComparison.OrdinalIgnoreCase))
             : jdkVersions.FirstOrDefault();
 
         RemoteMavenVersionComboBox.ItemsSource = mavenVersions;
@@ -719,7 +723,6 @@ public partial class MainWindow : Window
 
         if (failure is not null)
         {
-            HideSuccessNotice();
             System.Windows.MessageBox.Show(
                 this,
                 failure.Message,
@@ -747,17 +750,14 @@ public partial class MainWindow : Window
         }
     }
 
-    private void ShowSuccessNotice(string message)
+    private void ShowSuccessDialog(string message)
     {
-        SuccessNoticeTitleTextBlock.Text = _localizer["successNoticeTitle"];
-        SuccessNoticeMessageTextBlock.Text = message;
-        SuccessNoticeBorder.Visibility = Visibility.Visible;
-    }
-
-    private void HideSuccessNotice()
-    {
-        SuccessNoticeMessageTextBlock.Text = string.Empty;
-        SuccessNoticeBorder.Visibility = Visibility.Collapsed;
+        System.Windows.MessageBox.Show(
+            this,
+            message,
+            _localizer["successTitle"],
+            MessageBoxButton.OK,
+            MessageBoxImage.Information);
     }
 
     private void PushActivity(string message)
@@ -785,7 +785,6 @@ public partial class MainWindow : Window
     private void ShowValidationWarning(string messageKey)
     {
         var message = _localizer[messageKey];
-        HideSuccessNotice();
         SetStatus(message);
         System.Windows.MessageBox.Show(
             this,
@@ -1008,7 +1007,7 @@ public partial class MainWindow : Window
                     kind == ToolchainKind.Jdk ? "jdkSwitchedStatus" : "mavenSwitchedStatus",
                     installation.DisplayName);
             },
-            ShowSuccessNotice);
+            ShowSuccessDialog);
     }
 
     private async void OnRemoveSelectedJdkClicked(object sender, RoutedEventArgs e)
@@ -1053,7 +1052,7 @@ public partial class MainWindow : Window
 
     private async Task InstallRemoteJdkAsync(bool switchAfterInstall)
     {
-        if (!TryGetSelectedRemoteJdkFeature(out var featureVersion))
+        if (!TryGetSelectedRemoteJdkPackage(out var package))
         {
             ShowValidationWarning("validationSelectRemoteJdkVersion");
             return;
@@ -1067,7 +1066,6 @@ public partial class MainWindow : Window
             async () =>
             {
                 ReportBusyStage("busyInstallingJdk", "busyDetailResolvingPackage", 8);
-                var package = await _temurinSource.ResolveLatestAsync(featureVersion, "x64", CancellationToken.None);
                 var progress = new Progress<PackageInstallProgress>(value => ReportPackageInstallProgress("busyInstallingJdk", value));
                 var installation = await _packageInstallationService.InstallAsync(package, _layout, CancellationToken.None, progress);
                 ReportBusyStage("busyInstallingJdk", "busyDetailRegisteringInstallation", 97);
@@ -1097,7 +1095,7 @@ public partial class MainWindow : Window
                 var statusKey = switchAfterInstall ? "jdkInstalledAndActivatedStatus" : "jdkInstalledStatus";
                 return _localizer.Format(statusKey, installation.DisplayName);
             },
-            ShowSuccessNotice);
+            ShowSuccessDialog);
     }
 
     private async Task InstallRemoteMavenAsync(bool switchAfterInstall)
@@ -1146,7 +1144,7 @@ public partial class MainWindow : Window
                 var statusKey = switchAfterInstall ? "mavenInstalledAndActivatedStatus" : "mavenInstalledStatus";
                 return _localizer.Format(statusKey, installation.DisplayName);
             },
-            ShowSuccessNotice);
+            ShowSuccessDialog);
     }
 
     private async Task RemoveSelectedInstallationAsync(ToolchainKind kind, bool deleteFiles)
@@ -1184,15 +1182,15 @@ public partial class MainWindow : Window
             });
     }
 
-    private bool TryGetSelectedRemoteJdkFeature(out int featureVersion)
+    private bool TryGetSelectedRemoteJdkPackage(out RemotePackageDescriptor package)
     {
-        if (RemoteJdkVersionComboBox.SelectedItem is int selectedFeature)
+        if (RemoteJdkVersionComboBox.SelectedItem is RemotePackageDescriptor selectedPackage)
         {
-            featureVersion = selectedFeature;
+            package = selectedPackage;
             return true;
         }
 
-        featureVersion = default;
+        package = null!;
         return false;
     }
 
@@ -1315,7 +1313,6 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            HideSuccessNotice();
             SetStatus(_localizer.Format("statusOperationFailed", ex.Message));
             System.Windows.MessageBox.Show(
                 this,
@@ -1590,11 +1587,6 @@ public partial class MainWindow : Window
         var lines = new List<string> { $"{label}:" };
         lines.AddRange(segments.Select(segment => $"  - {segment}"));
         return lines;
-    }
-
-    private void OnDismissSuccessNoticeClicked(object sender, RoutedEventArgs e)
-    {
-        HideSuccessNotice();
     }
 
     private void OnEmbeddedListPreviewMouseWheel(object sender, MouseWheelEventArgs e)

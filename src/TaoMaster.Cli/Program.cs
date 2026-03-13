@@ -371,12 +371,13 @@ async Task RunRemoteAsync(string[] cliArgs)
     switch (cliArgs[1].ToLowerInvariant())
     {
         case "jdks":
-            var releases = await temurinSource.GetAvailableFeatureReleasesAsync(CancellationToken.None);
-            Console.WriteLine("Temurin 可安装 JDK 特性版本");
-            foreach (var release in releases)
+            var packages = await temurinSource.GetLatestPackagesByFeatureAsync("x64", CancellationToken.None);
+            Console.WriteLine("Temurin 可安装 JDK 版本（每个特性线当前最新补丁）");
+            foreach (var package in packages)
             {
-                Console.WriteLine($"- {release}");
+                Console.WriteLine($"- {package.DisplayName}");
             }
+            Console.WriteLine("Oracle JDK 当前支持本机发现和导入管理，远程下载源暂未接入。");
             break;
         case "mavens":
             var versions = await mavenSource.GetCurrentVersionsAsync(CancellationToken.None);
@@ -449,12 +450,8 @@ async Task RunInstallAsync(string[] cliArgs)
 async Task<RemotePackageDescriptor> ResolveJdkPackageAsync(string[] cliArgs)
 {
     var versionText = GetOptionValue(cliArgs, "--version");
-    var featureVersion = string.IsNullOrWhiteSpace(versionText)
-        ? (await temurinSource.GetAvailableFeatureReleasesAsync(CancellationToken.None)).First()
-        : int.Parse(versionText);
     var architecture = GetOptionValue(cliArgs, "--arch") ?? "x64";
-
-    return await temurinSource.ResolveLatestAsync(featureVersion, architecture, CancellationToken.None);
+    return await temurinSource.ResolveAsync(versionText, architecture, CancellationToken.None);
 }
 
 async Task<RemotePackageDescriptor> ResolveMavenPackageAsync(string[] cliArgs)
@@ -513,7 +510,7 @@ static void PrintHelp(WorkspaceLayout layout)
     Console.WriteLine("  remove maven <id>");
     Console.WriteLine("  uninstall jdk <id>");
     Console.WriteLine("  uninstall maven <id>");
-    Console.WriteLine("  install jdk [--version 17] [--arch x64] [--switch]");
+    Console.WriteLine("  install jdk [--version 21.0.10|21] [--arch x64] [--switch]");
     Console.WriteLine("  install maven [--version 3.9.14] [--switch]");
     Console.WriteLine("  doctor");
     Console.WriteLine("  repair user-path");

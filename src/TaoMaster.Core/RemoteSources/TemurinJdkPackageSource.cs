@@ -27,6 +27,32 @@ public sealed class TemurinJdkPackageSource
             .ToList();
     }
 
+    public async Task<IReadOnlyList<RemotePackageDescriptor>> GetLatestPackagesByFeatureAsync(
+        string architecture,
+        CancellationToken cancellationToken)
+    {
+        var releases = await GetAvailableFeatureReleasesAsync(cancellationToken);
+        var tasks = releases.Select(async feature =>
+        {
+            try
+            {
+                return await ResolveLatestAsync(feature, architecture, cancellationToken);
+            }
+            catch
+            {
+                return null;
+            }
+        });
+        var packages = await Task.WhenAll(tasks);
+
+        return packages
+            .Where(package => package is not null)
+            .Select(package => package!)
+            .OrderByDescending(package => GetFeatureVersion(package.Version))
+            .ThenByDescending(package => package.Version, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
     public async Task<RemotePackageDescriptor> ResolveLatestAsync(
         int featureVersion,
         string architecture,
@@ -49,7 +75,7 @@ public sealed class TemurinJdkPackageSource
         return new RemotePackageDescriptor(
             Kind: ToolchainKind.Jdk,
             Provider: "temurin",
-            DisplayName: $"Temurin JDK {semver}",
+            DisplayName: $"Temurin JDK {semver} (Feature {featureVersion})",
             Version: semver,
             DownloadUrl: package.Link,
             FileName: package.Name,
@@ -57,6 +83,39 @@ public sealed class TemurinJdkPackageSource
             ChecksumAlgorithm: "SHA256",
             SuggestedInstallDirectoryName: $"temurin-{semver}-{architecture}",
             Architecture: architecture);
+    }
+
+    public async Task<RemotePackageDescriptor> ResolveAsync(
+        string? versionOrFeature,
+        string architecture,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(versionOrFeature))
+        {
+            return (await GetLatestPackagesByFeatureAsync(architecture, cancellationToken)).First();
+        }
+
+        if (int.TryParse(versionOrFeature, out var featureVersion))
+        {
+            return await ResolveLatestAsync(featureVersion, architecture, cancellationToken);
+        }
+
+        var packages = await GetLatestPackagesByFeatureAsync(architecture, cancellationToken);
+        var matchedPackage = packages.FirstOrDefault(package =>
+            package.Version.Equals(versionOrFeature, StringComparison.OrdinalIgnoreCase));
+
+        if (matchedPackage is not null)
+        {
+            return matchedPackage;
+        }
+
+        throw new InvalidOperationException($"Temurin 没有找到可用于 Windows {architecture} 的 JDK {versionOrFeature} 包。");
+    }
+
+    private static int GetFeatureVersion(string version)
+    {
+        var featureText = version.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault();
+        return int.TryParse(featureText, out var featureVersion) ? featureVersion : 0;
     }
 
     private sealed record AvailableReleasesResponse(

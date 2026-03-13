@@ -331,7 +331,6 @@
               Margin="0,20,20,20">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
@@ -395,46 +394,8 @@
                 </Grid>
             </Border>
 
-            <Border x:Name="SuccessNoticeBorder"
-                    Grid.Row="1"
-                    Margin="0,16,0,0"
-                    Padding="16,14"
-                    CornerRadius="14"
-                    Background="{StaticResource AccentSoftBrush}"
-                    BorderBrush="#CFE1D7"
-                    BorderThickness="1"
-                    Visibility="Collapsed">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-
-                    <StackPanel>
-                        <TextBlock x:Name="SuccessNoticeTitleTextBlock"
-                                   Tag="successNoticeTitle"
-                                   FontSize="13"
-                                   FontWeight="SemiBold"
-                                   Foreground="{StaticResource AccentBrush}"
-                                   Text="Completed" />
-                        <TextBlock x:Name="SuccessNoticeMessageTextBlock"
-                                   Margin="0,6,0,0"
-                                   FontSize="13.5"
-                                   Foreground="{StaticResource InkBrush}"
-                                   TextWrapping="Wrap" />
-                    </StackPanel>
-
-                    <Button Grid.Column="1"
-                            Tag="dismissButton"
-                            Content="Dismiss"
-                            Margin="12,0,0,0"
-                            Style="{StaticResource SecondaryButtonStyle}"
-                            Click="OnDismissSuccessNoticeClicked" />
-                </Grid>
-            </Border>
-
             <Grid x:Name="ContentHost"
-                  Grid.Row="2"
+                  Grid.Row="1"
                   Margin="0,24,0,0">
                 <ScrollViewer x:Name="DashboardPage"
                               VerticalScrollBarVisibility="Auto">
@@ -1009,6 +970,10 @@
                                                 Style="{StaticResource SecondaryButtonStyle}"
                                                 Click="OnRefreshRemoteClicked" />
                                     </Grid>
+                                    <TextBlock Margin="0,0,0,14"
+                                               Tag="remoteJdkProviderHint"
+                                               Style="{StaticResource BodyTextStyle}"
+                                               Text="Remote JDK downloads currently use Temurin. Oracle JDK already supports local discovery and import into TaoMaster." />
                                     <TextBlock FontWeight="SemiBold"
                                                Tag="temurinJdkLabel"
                                                Foreground="{StaticResource InkBrush}"
@@ -1023,6 +988,7 @@
                                                   Grid.Column="0"
                                                   Height="36"
                                                   Margin="0,0,10,0"
+                                                  DisplayMemberPath="DisplayName"
                                                   Style="{StaticResource InputComboBoxStyle}" />
                                         <Button Grid.Column="1"
                                                 Tag="installButton"
