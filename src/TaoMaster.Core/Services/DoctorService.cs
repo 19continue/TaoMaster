@@ -178,7 +178,7 @@ public sealed class DoctorService
     {
         var scope = winningCandidate.Scope == EnvironmentPathScope.Machine ? "machine" : "user";
         var recommendation = winningCandidate.Scope == EnvironmentPathScope.Machine
-            ? "Remove or reorder the winning machine PATH entry in System Properties > Environment Variables."
+            ? "Run `taomaster repair machine-path-script` or remove/reorder the winning machine PATH entry with administrator privileges."
             : "Run `taomaster repair user-path` or use the desktop action to remove conflicting user PATH entries.";
 
         return $"Expected: {expectedPath}{Environment.NewLine}"

@@ -675,6 +675,27 @@ public partial class MainWindow : Window
             });
     }
 
+    private async void OnCopyMachinePathScriptClicked(object sender, RoutedEventArgs e)
+    {
+        await ExecuteBusyAsync(
+            "busyPreparingMachinePathScript",
+            async () =>
+            {
+                var selection = _selectionResolver.Resolve(_state);
+                var plan = await Task.Run(() => _environmentService.BuildMachinePathRepairPlan(
+                    selection.Jdk?.HomeDirectory,
+                    selection.Maven?.HomeDirectory));
+
+                if (!plan.Changed)
+                {
+                    return _localizer["machinePathAlreadyCleanStatus"];
+                }
+
+                System.Windows.Clipboard.SetText(plan.PowerShellScript);
+                return _localizer["machinePathScriptCopiedStatus"];
+            });
+    }
+
     private async void OnRefreshRemoteClicked(object sender, RoutedEventArgs e)
     {
         await ExecuteBusyAsync(

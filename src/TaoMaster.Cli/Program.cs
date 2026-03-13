@@ -243,35 +243,73 @@ void RunDoctor()
 
 void RunRepair(string[] cliArgs)
 {
-    if (cliArgs.Length < 2 || !cliArgs[1].Equals("user-path", StringComparison.OrdinalIgnoreCase))
+    if (cliArgs.Length < 2)
     {
-        throw new ArgumentException("用法：`repair user-path`。");
+        throw new ArgumentException("用法：`repair user-path` 或 `repair machine-path-script`。");
     }
 
     var state = stateStore.EnsureInitialized(layout);
     var selection = selectionResolver.Resolve(state);
-    var result = environmentService.RepairUserPathForManagedToolchains(
-        environmentService.GetUserVariable(EnvironmentVariableNames.Path),
-        includeJavaEntry: selection.Jdk is not null,
-        includeMavenEntry: selection.Maven is not null);
 
-    environmentService.SetUserVariable(EnvironmentVariableNames.Path, result.UpdatedPath);
-    activationService.Apply(state);
-
-    Console.WriteLine("User PATH repair completed.");
-    Console.WriteLine($"Removed segments: {result.RemovedSegments.Count}");
-
-    foreach (var removedSegment in result.RemovedSegments)
+    if (cliArgs[1].Equals("user-path", StringComparison.OrdinalIgnoreCase))
     {
-        Console.WriteLine($"- {removedSegment}");
+        var result = environmentService.RepairUserPathForManagedToolchains(
+            environmentService.GetUserVariable(EnvironmentVariableNames.Path),
+            includeJavaEntry: selection.Jdk is not null,
+            includeMavenEntry: selection.Maven is not null);
+
+        environmentService.SetUserVariable(EnvironmentVariableNames.Path, result.UpdatedPath);
+        activationService.Apply(state);
+
+        Console.WriteLine("User PATH repair completed.");
+        Console.WriteLine($"Removed segments: {result.RemovedSegments.Count}");
+
+        foreach (var removedSegment in result.RemovedSegments)
+        {
+            Console.WriteLine($"- {removedSegment}");
+        }
+
+        if (result.RemovedSegments.Count == 0)
+        {
+            Console.WriteLine("No conflicting direct JDK or Maven entries were found in user PATH.");
+        }
+
+        Console.WriteLine($"Updated PATH: {result.UpdatedPath}");
+        return;
     }
 
-    if (result.RemovedSegments.Count == 0)
+    if (cliArgs[1].Equals("machine-path-script", StringComparison.OrdinalIgnoreCase)
+        || cliArgs[1].Equals("machine-path", StringComparison.OrdinalIgnoreCase))
     {
-        Console.WriteLine("No conflicting direct JDK or Maven entries were found in user PATH.");
+        var plan = environmentService.BuildMachinePathRepairPlan(
+            selection.Jdk?.HomeDirectory,
+            selection.Maven?.HomeDirectory);
+
+        Console.WriteLine("Machine PATH repair analysis completed.");
+        Console.WriteLine($"Detected conflicting machine PATH segments: {plan.RemovedSegments.Count}");
+
+        foreach (var removedSegment in plan.RemovedSegments)
+        {
+            Console.WriteLine($"- {removedSegment}");
+        }
+
+        if (!plan.Changed)
+        {
+            Console.WriteLine("No conflicting machine PATH entries were detected.");
+            return;
+        }
+
+        Directory.CreateDirectory(layout.ScriptRoot);
+
+        var scriptPath = Path.Combine(layout.ScriptRoot, "repair-machine-path.ps1");
+        File.WriteAllText(scriptPath, plan.PowerShellScript);
+
+        Console.WriteLine($"Script saved: {scriptPath}");
+        Console.WriteLine("Run the script from an elevated PowerShell session to update the machine PATH.");
+        return;
     }
 
-    Console.WriteLine($"Updated PATH: {result.UpdatedPath}");
+    throw new ArgumentException("用法：`repair user-path` 或 `repair machine-path-script`。");
 }
 
 void RunEnv(string[] cliArgs)
@@ -436,6 +474,7 @@ static void PrintHelp(WorkspaceLayout layout)
     Console.WriteLine("  install maven [--version 3.9.14] [--switch]");
     Console.WriteLine("  doctor");
     Console.WriteLine("  repair user-path");
+    Console.WriteLine("  repair machine-path-script");
     Console.WriteLine("  env powershell");
     Console.WriteLine("  env cmd");
     Console.WriteLine();

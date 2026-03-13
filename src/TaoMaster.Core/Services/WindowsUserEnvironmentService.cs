@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Collections;
 using System.Diagnostics;
+using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using Microsoft.Win32;
@@ -152,6 +153,54 @@ public sealed class WindowsUserEnvironmentService
         var updatedPath = BuildManagedUserPath(retainedPath, includeJavaEntry, includeMavenEntry);
 
         return new UserPathRepairResult(updatedPath, removedSegments);
+    }
+
+    public MachinePathRepairPlan BuildMachinePathRepairPlan(
+        string? selectedJdkHome,
+        string? selectedMavenHome,
+        string? userPathOverride = null)
+    {
+        var currentMachinePath = GetMachineVariable(EnvironmentVariableNames.Path) ?? string.Empty;
+        var userPath = userPathOverride ?? GetUserVariable(EnvironmentVariableNames.Path);
+        var variableMap = BuildVariableMap(
+            selectedJdkHome ?? GetUserVariable(EnvironmentVariableNames.JavaHome),
+            selectedMavenHome ?? GetUserVariable(EnvironmentVariableNames.MavenHome),
+            selectedMavenHome ?? GetUserVariable(EnvironmentVariableNames.M2Home));
+
+        var removedSegments = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        if (!string.IsNullOrWhiteSpace(selectedJdkHome))
+        {
+            foreach (var candidate in FindExecutableCandidates("java.exe", userPath, variableMap)
+                         .Where(candidate => candidate.Scope == EnvironmentPathScope.Machine))
+            {
+                removedSegments.Add(candidate.OriginalPathSegment);
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(selectedMavenHome))
+        {
+            foreach (var candidate in FindExecutableCandidates("mvn.cmd", userPath, variableMap)
+                         .Where(candidate => candidate.Scope == EnvironmentPathScope.Machine))
+            {
+                removedSegments.Add(candidate.OriginalPathSegment);
+            }
+        }
+
+        var retainedSegments = SplitPath(currentMachinePath)
+            .Where(segment => !removedSegments.Contains(segment))
+            .ToList();
+
+        var updatedPath = string.Join(";", retainedSegments);
+        var orderedRemovedSegments = removedSegments
+            .OrderBy(segment => segment, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        return new MachinePathRepairPlan(
+            currentMachinePath,
+            updatedPath,
+            orderedRemovedSegments,
+            BuildMachinePathRepairScript(updatedPath, orderedRemovedSegments));
     }
 
     public string BuildProcessPath(string effectivePath, string? selectedJdkHome, string? selectedMavenHome)
@@ -376,6 +425,60 @@ public sealed class WindowsUserEnvironmentService
                        || normalized.Contains("apache-maven", StringComparison.OrdinalIgnoreCase)
                        || normalized.Contains(@"\java\", StringComparison.OrdinalIgnoreCase)));
     }
+
+    private static string BuildMachinePathRepairScript(
+        string updatedPath,
+        IReadOnlyList<string> removedSegments)
+    {
+        if (removedSegments.Count == 0)
+        {
+            return "Write-Host 'No conflicting machine PATH entries were detected.'";
+        }
+
+        var escapedUpdatedPath = EscapePowerShellLiteral(updatedPath);
+        var backupStamp = DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
+
+        var lines = new List<string>
+        {
+            "$ErrorActionPreference = 'Stop'",
+            "$principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())",
+            "if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { throw 'Run this script in an elevated PowerShell session.' }",
+            "$backupFile = Join-Path $env:TEMP 'taomaster-machine-path-backup-" + backupStamp + ".txt'",
+            "$registryPath = 'SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment'",
+            "$environmentKey = [Microsoft.Win32.Registry]::LocalMachine.OpenSubKey($registryPath, $true)",
+            "if ($null -eq $environmentKey) { throw 'Unable to open HKLM machine environment registry key.' }",
+            "$currentPath = $environmentKey.GetValue('Path', '', [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)",
+            "Set-Content -Path $backupFile -Value $currentPath -Encoding UTF8",
+            "$newPath = '" + escapedUpdatedPath + "'",
+            "$environmentKey.SetValue('Path', $newPath, [Microsoft.Win32.RegistryValueKind]::ExpandString)",
+            "$environmentKey.Close()",
+            "Add-Type -TypeDefinition @'",
+            "using System;",
+            "using System.Runtime.InteropServices;",
+            "public static class TaoMasterNativeMethods",
+            "{",
+            "    [DllImport(\"user32.dll\", SetLastError = true, CharSet = CharSet.Unicode)]",
+            "    public static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint msg, UIntPtr wParam, string lParam, uint fuFlags, uint uTimeout, out UIntPtr lpdwResult);",
+            "}",
+            "'@",
+            "$result = [UIntPtr]::Zero",
+            "[void][TaoMasterNativeMethods]::SendMessageTimeout([IntPtr]0xffff, 0x001A, [UIntPtr]::Zero, 'Environment', 0x0002, 200, [ref]$result)",
+            "Write-Host 'Removed machine PATH entries:'"
+        };
+
+        foreach (var segment in removedSegments)
+        {
+            lines.Add("Write-Host ' - " + EscapePowerShellLiteral(segment) + "'");
+        }
+
+        lines.Add("Write-Host ('Backup saved to: ' + $backupFile)");
+        lines.Add("Write-Host 'Restart terminals and IDEs that were already open.'");
+
+        return string.Join(Environment.NewLine, lines);
+    }
+
+    private static string EscapePowerShellLiteral(string value) =>
+        value.Replace("'", "''", StringComparison.Ordinal);
 
     [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
     private static extern bool SendMessageTimeout(

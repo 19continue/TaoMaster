@@ -438,6 +438,10 @@
                                         Content="Repair User PATH"
                                         Style="{StaticResource AccentButtonStyle}"
                                         Click="OnRepairUserPathClicked" />
+                                <Button Tag="copyMachinePathScriptButton"
+                                        Content="Copy Machine PATH Script"
+                                        Style="{StaticResource SecondaryButtonStyle}"
+                                        Click="OnCopyMachinePathScriptClicked" />
                                 <Button Tag="refreshRemoteButton"
                                         Content="Refresh Remote Versions"
                                         Style="{StaticResource SecondaryButtonStyle}"
