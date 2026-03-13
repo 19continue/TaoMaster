@@ -79,6 +79,12 @@ public sealed class ManagerStateStore
         var normalizedInstallRoot = string.IsNullOrWhiteSpace(settings.InstallRoot) ? layout.RootDirectory : settings.InstallRoot;
         var normalizedCacheRoot = string.IsNullOrWhiteSpace(settings.DownloadCacheRoot) ? layout.CacheRoot : settings.DownloadCacheRoot;
         var normalizedTempRoot = string.IsNullOrWhiteSpace(settings.TempRoot) ? layout.TempRoot : settings.TempRoot;
+        var normalizedManagedJdkInstallRoot = string.IsNullOrWhiteSpace(settings.ManagedJdkInstallRoot)
+            ? layout.JdkRoot
+            : settings.ManagedJdkInstallRoot;
+        var normalizedManagedMavenInstallRoot = string.IsNullOrWhiteSpace(settings.ManagedMavenInstallRoot)
+            ? layout.MavenRoot
+            : settings.ManagedMavenInstallRoot;
         var normalizedMavenSettingsFilePath = string.IsNullOrWhiteSpace(settings.MavenSettingsFilePath)
             ? ManagerSettings.GetDefaultMavenSettingsFilePath()
             : settings.MavenSettingsFilePath;
@@ -86,14 +92,22 @@ public sealed class ManagerStateStore
             ? ManagerSettings.GetDefaultMavenLocalRepositoryPath()
             : settings.MavenLocalRepositoryPath;
         var normalizedMirrors = settings.MavenMirrors ?? Array.Empty<MavenMirrorConfiguration>();
+        var normalizedCustomDownloadSources = settings.CustomMavenDownloadSources ?? Array.Empty<MavenDownloadSourceConfiguration>();
+        var normalizedPreferredMavenDownloadSourceId = string.IsNullOrWhiteSpace(settings.PreferredMavenDownloadSourceId)
+            ? "apache-official"
+            : settings.PreferredMavenDownloadSourceId.Trim();
 
         if (normalizedPathMode == settings.PathMode
             && normalizedInstallRoot == settings.InstallRoot
             && normalizedCacheRoot == settings.DownloadCacheRoot
             && normalizedTempRoot == settings.TempRoot
+            && normalizedManagedJdkInstallRoot == settings.ManagedJdkInstallRoot
+            && normalizedManagedMavenInstallRoot == settings.ManagedMavenInstallRoot
             && normalizedMavenSettingsFilePath == settings.MavenSettingsFilePath
             && normalizedMavenLocalRepositoryPath == settings.MavenLocalRepositoryPath
-            && normalizedMirrors.SequenceEqual(settings.MavenMirrors ?? Array.Empty<MavenMirrorConfiguration>()))
+            && normalizedMirrors.SequenceEqual(settings.MavenMirrors ?? Array.Empty<MavenMirrorConfiguration>())
+            && normalizedCustomDownloadSources.SequenceEqual(settings.CustomMavenDownloadSources ?? Array.Empty<MavenDownloadSourceConfiguration>())
+            && normalizedPreferredMavenDownloadSourceId == settings.PreferredMavenDownloadSourceId)
         {
             return state;
         }
@@ -106,9 +120,13 @@ public sealed class ManagerStateStore
                 InstallRoot = normalizedInstallRoot,
                 DownloadCacheRoot = normalizedCacheRoot,
                 TempRoot = normalizedTempRoot,
+                ManagedJdkInstallRoot = normalizedManagedJdkInstallRoot,
+                ManagedMavenInstallRoot = normalizedManagedMavenInstallRoot,
                 MavenSettingsFilePath = normalizedMavenSettingsFilePath,
                 MavenLocalRepositoryPath = normalizedMavenLocalRepositoryPath,
-                MavenMirrors = normalizedMirrors
+                MavenMirrors = normalizedMirrors,
+                CustomMavenDownloadSources = normalizedCustomDownloadSources,
+                PreferredMavenDownloadSourceId = normalizedPreferredMavenDownloadSourceId
             }
         };
     }

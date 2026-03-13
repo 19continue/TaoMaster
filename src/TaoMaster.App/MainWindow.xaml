@@ -400,9 +400,20 @@
                 <ScrollViewer x:Name="DashboardPage"
                               VerticalScrollBarVisibility="Auto">
                     <StackPanel>
-                        <UniformGrid Columns="2"
-                                     Margin="0,0,0,18">
-                            <Border Style="{StaticResource CardStyle}">
+                        <Grid Margin="0,0,0,18">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="34" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <Border Grid.Row="0"
+                                    Grid.Column="0"
+                                    Style="{StaticResource CardStyle}">
                                 <StackPanel>
                                     <TextBlock Tag="dashboardCurrentJdkTitle"
                                                Style="{StaticResource SectionTitleStyle}"
@@ -422,7 +433,9 @@
                                 </StackPanel>
                             </Border>
 
-                            <Border Style="{StaticResource CardStyle}">
+                            <Border Grid.Row="0"
+                                    Grid.Column="2"
+                                    Style="{StaticResource CardStyle}">
                                 <StackPanel>
                                     <TextBlock Tag="dashboardCurrentMavenTitle"
                                                Style="{StaticResource SectionTitleStyle}"
@@ -442,7 +455,9 @@
                                 </StackPanel>
                             </Border>
 
-                            <Border Style="{StaticResource CardStyle}">
+                            <Border Grid.Row="1"
+                                    Grid.Column="0"
+                                    Style="{StaticResource CardStyle}">
                                 <StackPanel>
                                     <TextBlock Tag="dashboardScopeTitle"
                                                Style="{StaticResource SectionTitleStyle}"
@@ -465,7 +480,9 @@
                                 </StackPanel>
                             </Border>
 
-                            <Border Style="{StaticResource CardStyle}">
+                            <Border Grid.Row="1"
+                                    Grid.Column="2"
+                                    Style="{StaticResource CardStyle}">
                                 <StackPanel>
                                     <TextBlock Tag="dashboardEnvironmentTitle"
                                                Style="{StaticResource SectionTitleStyle}"
@@ -488,7 +505,7 @@
                                                Text="Run Doctor to verify shell and PATH state." />
                                 </StackPanel>
                             </Border>
-                        </UniformGrid>
+                        </Grid>
 
                         <Grid>
                             <Grid.ColumnDefinitions>
@@ -554,10 +571,6 @@
                                         </Grid>
 
                                         <WrapPanel>
-                                            <Button Tag="runDoctorButton"
-                                                    Content="Run Doctor"
-                                                    Style="{StaticResource SecondaryButtonStyle}"
-                                                    Click="OnRunDoctorClicked" />
                                             <Button Tag="navVersions"
                                                     Content="Versions"
                                                     Style="{StaticResource SecondaryButtonStyle}"
@@ -1316,16 +1329,57 @@
                                                FontFamily="Consolas"
                                                FontSize="12.5"
                                                TextWrapping="Wrap" />
-                                    <TextBlock Margin="0,16,0,0"
-                                               Tag="settingsInstallRootLabel"
+                                    <TextBlock x:Name="ManagedJdkInstallRootLabelTextBlock"
+                                               Margin="0,16,0,0"
                                                FontWeight="SemiBold"
                                                Foreground="{StaticResource InkBrush}"
-                                               Text="Install Root" />
-                                    <TextBlock x:Name="InstallRootTextBlock"
-                                               Margin="0,8,0,0"
-                                               FontFamily="Consolas"
-                                               FontSize="12.5"
-                                               TextWrapping="Wrap" />
+                                               Text="Managed JDK Install Directory" />
+                                    <Grid Margin="0,8,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox x:Name="ManagedJdkInstallRootTextBox"
+                                                 Grid.Column="0"
+                                                 Height="36"
+                                                 Margin="0,0,10,0"
+                                                 Style="{StaticResource InputTextBoxStyle}"
+                                                 VerticalContentAlignment="Center" />
+                                        <Button Grid.Column="1"
+                                                Tag="browseButton"
+                                                Content="Browse"
+                                                Width="88"
+                                                Style="{StaticResource SecondaryButtonStyle}"
+                                                Click="OnBrowseManagedJdkInstallRootClicked" />
+                                    </Grid>
+                                    <TextBlock x:Name="ManagedMavenInstallRootLabelTextBlock"
+                                               Margin="0,16,0,0"
+                                               FontWeight="SemiBold"
+                                               Foreground="{StaticResource InkBrush}"
+                                               Text="Managed Maven Install Directory" />
+                                    <Grid Margin="0,8,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox x:Name="ManagedMavenInstallRootTextBox"
+                                                 Grid.Column="0"
+                                                 Height="36"
+                                                 Margin="0,0,10,0"
+                                                 Style="{StaticResource InputTextBoxStyle}"
+                                                 VerticalContentAlignment="Center" />
+                                        <Button Grid.Column="1"
+                                                Tag="browseButton"
+                                                Content="Browse"
+                                                Width="88"
+                                                Style="{StaticResource SecondaryButtonStyle}"
+                                                Click="OnBrowseManagedMavenInstallRootClicked" />
+                                    </Grid>
+                                    <Button x:Name="SaveManagedRootsButton"
+                                            Margin="0,16,0,0"
+                                            Content="Save and Migrate Install Directories"
+                                            Style="{StaticResource ActionButtonStyle}"
+                                            Click="OnSaveManagedInstallRootsClicked" />
                                 </StackPanel>
                             </Border>
                         </StackPanel>
@@ -1397,6 +1451,12 @@
                                                Tag="settingsMavenConfigDescription"
                                                Style="{StaticResource BodyTextStyle}"
                                                Text="Configure settings.xml, migrate the local repository path, and manage Maven download mirrors from one place." />
+                                    <WrapPanel Margin="0,0,0,16">
+                                        <Button x:Name="LoadMavenSettingsButton"
+                                                Content="Load Current Maven Settings"
+                                                Style="{StaticResource SecondaryButtonStyle}"
+                                                Click="OnLoadMavenSettingsClicked" />
+                                    </WrapPanel>
 
                                     <TextBlock Tag="settingsMavenSettingsPathLabel"
                                                FontWeight="SemiBold"
@@ -1444,6 +1504,9 @@
                                                 Style="{StaticResource SecondaryButtonStyle}"
                                                 Click="OnBrowseMavenLocalRepositoryClicked" />
                                     </Grid>
+                                    <CheckBox x:Name="MavenRepositoryMigrationCheckBox"
+                                              Margin="0,12,0,0"
+                                              Content="Move existing local repository contents when the repository directory changes." />
 
                                     <TextBlock Margin="0,16,0,0"
                                                Tag="settingsMavenMirrorTitle"
@@ -1507,7 +1570,7 @@
                                                  Style="{StaticResource InputTextBoxStyle}"
                                                  VerticalContentAlignment="Center"
                                                  Text="*" />
-                                        <Button Grid.Row="0"
+                                       <Button Grid.Row="0"
                                                 Grid.Column="3"
                                                 Tag="addCustomMirrorButton"
                                                 Content="Add Custom"
@@ -1531,7 +1594,8 @@
                                              MinHeight="190"
                                              Style="{StaticResource CleanListBoxStyle}"
                                              PreviewMouseWheel="OnEmbeddedListPreviewMouseWheel"
-                                             ItemContainerStyle="{StaticResource SelectablePanelListItemStyle}">
+                                             ItemContainerStyle="{StaticResource SelectablePanelListItemStyle}"
+                                             SelectionChanged="OnConfiguredMavenMirrorSelectionChanged">
                                         <ListBox.ItemTemplate>
                                             <DataTemplate>
                                                 <StackPanel Margin="0,4,12,4">
@@ -1560,18 +1624,80 @@
                                     </ListBox>
 
                                     <WrapPanel Margin="0,16,0,0">
+                                        <Button x:Name="UpdateSelectedMirrorButton"
+                                                Content="Update Selected Mirror"
+                                                Style="{StaticResource SecondaryButtonStyle}"
+                                                Click="OnUpdateSelectedMirrorClicked" />
+                                        <Button x:Name="ClearMirrorEditorButton"
+                                                Content="Clear Mirror Editor"
+                                                Style="{StaticResource SecondaryButtonStyle}"
+                                                Click="OnClearMirrorEditorClicked" />
                                         <Button Tag="removeSelectedMirrorButton"
                                                 Content="Remove Selected Mirror"
                                                 Style="{StaticResource SecondaryButtonStyle}"
                                                 Click="OnRemoveSelectedMirrorClicked" />
-                                        <Button Tag="applyMavenSettingsButton"
-                                                Content="Apply settings.xml"
+                                        <Button x:Name="SaveMavenSettingsButton"
+                                                Content="Save Maven Configuration"
                                                 Style="{StaticResource ActionButtonStyle}"
-                                                Click="OnApplyMavenSettingsClicked" />
-                                        <Button Tag="migrateMavenRepositoryButton"
-                                                Content="Apply + Migrate Repository"
+                                                Click="OnSaveMavenSettingsClicked" />
+                                    </WrapPanel>
+
+                                    <TextBlock x:Name="MavenDownloadSourceTitleTextBlock"
+                                               Margin="0,20,0,0"
+                                               FontWeight="SemiBold"
+                                               Foreground="{StaticResource InkBrush}"
+                                               Text="Maven Download Source" />
+                                    <TextBlock x:Name="MavenDownloadSourceDescriptionTextBlock"
+                                               Margin="0,8,0,0"
+                                               Style="{StaticResource BodyTextStyle}"
+                                               Text="Version lists stay synced from Apache official metadata. Binary downloads can use the selected source below." />
+                                    <ComboBox x:Name="MavenDownloadSourceComboBox"
+                                              Margin="0,8,0,0"
+                                              Height="36"
+                                              DisplayMemberPath="Name"
+                                              Style="{StaticResource InputComboBoxStyle}"
+                                              SelectionChanged="OnMavenDownloadSourceSelectionChanged" />
+                                    <TextBlock x:Name="MavenDownloadSourceBaseUrlTextBlock"
+                                               Margin="0,8,0,0"
+                                               FontFamily="Consolas"
+                                               FontSize="12.5"
+                                               Foreground="{StaticResource MutedBrush}"
+                                               TextWrapping="Wrap" />
+
+                                    <TextBlock x:Name="CustomDownloadSourceTitleTextBlock"
+                                               Margin="0,16,0,0"
+                                               FontWeight="SemiBold"
+                                               Foreground="{StaticResource InkBrush}"
+                                               Text="Custom Download Source" />
+                                    <Grid Margin="0,8,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="1.1*" />
+                                            <ColumnDefinition Width="1.6*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox x:Name="CustomMavenDownloadSourceNameTextBox"
+                                                 Grid.Column="0"
+                                                 Height="36"
+                                                 Margin="0,0,10,0"
+                                                 Style="{StaticResource InputTextBoxStyle}"
+                                                 VerticalContentAlignment="Center" />
+                                        <TextBox x:Name="CustomMavenDownloadSourceUrlTextBox"
+                                                 Grid.Column="1"
+                                                 Height="36"
+                                                 Margin="0,0,10,0"
+                                                 Style="{StaticResource InputTextBoxStyle}"
+                                                 VerticalContentAlignment="Center" />
+                                        <Button x:Name="AddCustomDownloadSourceButton"
+                                                Grid.Column="2"
+                                                Content="Add Custom Source"
                                                 Style="{StaticResource SecondaryButtonStyle}"
-                                                Click="OnMigrateMavenRepositoryClicked" />
+                                                Click="OnAddCustomDownloadSourceClicked" />
+                                    </Grid>
+                                    <WrapPanel Margin="0,12,0,0">
+                                        <Button x:Name="RemoveSelectedDownloadSourceButton"
+                                                Content="Remove Selected Custom Source"
+                                                Style="{StaticResource SecondaryButtonStyle}"
+                                                Click="OnRemoveSelectedDownloadSourceClicked" />
                                     </WrapPanel>
                                 </StackPanel>
                             </Border>

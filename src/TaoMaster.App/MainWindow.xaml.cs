@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
 using System.Runtime.Versioning;
 using System.Windows;
 using System.Windows.Documents;
@@ -14,6 +15,7 @@ using TaoMaster.Core.RemoteSources;
 using TaoMaster.Core.Services;
 using TaoMaster.Core.State;
 using WpfButton = System.Windows.Controls.Button;
+using WpfCheckBox = System.Windows.Controls.CheckBox;
 using WpfComboBox = System.Windows.Controls.ComboBox;
 using WpfListBox = System.Windows.Controls.ListBox;
 using WpfSelectionChangedEventArgs = System.Windows.Controls.SelectionChangedEventArgs;
@@ -54,6 +56,7 @@ public partial class MainWindow : Window
     private readonly ApacheMavenPackageSource _mavenSource;
     private readonly PackageInstallationService _packageInstallationService;
     private readonly MavenConfigurationService _mavenConfigurationService;
+    private readonly ManagedInstallLayoutService _managedInstallLayoutService;
 
     private ManagerState _state;
     private DoctorReport? _lastDoctorReport;
@@ -61,8 +64,10 @@ public partial class MainWindow : Window
     private AppLocalizer _localizer;
     private readonly ObservableCollection<string> _activityEntries = [];
     private readonly ObservableCollection<MavenMirrorConfiguration> _configuredMavenMirrors = [];
+    private readonly ObservableCollection<MavenDownloadSourceConfiguration> _availableMavenDownloadSources = [];
     private bool _hasLoaded;
     private bool _suppressLanguageSelectionChanged;
+    private bool _suppressDownloadSourceSelectionChanged;
     private AppSection _currentSection = AppSection.Dashboard;
 
     public MainWindow()
@@ -84,6 +89,7 @@ public partial class MainWindow : Window
         _oracleSource = new OracleJdkPackageSource(_httpClient);
         _mavenSource = new ApacheMavenPackageSource(_httpClient);
         _mavenConfigurationService = new MavenConfigurationService();
+        _managedInstallLayoutService = new ManagedInstallLayoutService();
 
         var downloadService = new PackageDownloadService(_httpClient);
         var checksumService = new ChecksumService();
@@ -97,6 +103,7 @@ public partial class MainWindow : Window
         ActivityListBox.ItemsSource = _activityEntries;
         ConfiguredMavenMirrorsListBox.ItemsSource = _configuredMavenMirrors;
         BuiltInMavenMirrorComboBox.ItemsSource = _mavenConfigurationService.GetBuiltInMirrors();
+        MavenDownloadSourceComboBox.ItemsSource = _availableMavenDownloadSources;
         InitializeLanguageSelector();
         ApplyCurrentSection();
         ApplyLocalization();
@@ -124,6 +131,7 @@ public partial class MainWindow : Window
             async () =>
             {
                 _shellIntegrationStatus = await Task.Run(() => _shellIntegrationService.EnsureEnabled(_layout, _state));
+                await Task.Run(() => SyncMavenSettingsFromFile(persistState: true));
                 RefreshStateBindings();
 
                 await RefreshRemoteVersionsCoreAsync();
@@ -153,8 +161,9 @@ public partial class MainWindow : Window
     private void InitializeLanguageSelector()
     {
         _suppressLanguageSelectionChanged = true;
-        LanguageComboBox.ItemsSource = AppLocalizer.SupportedLanguages;
-        LanguageComboBox.SelectedItem = AppLocalizer.SupportedLanguages
+        var options = GetLanguageOptions();
+        LanguageComboBox.ItemsSource = options;
+        LanguageComboBox.SelectedItem = options
             .First(option => option.Language == _localizer.Language);
         _suppressLanguageSelectionChanged = false;
     }
@@ -176,6 +185,7 @@ public partial class MainWindow : Window
         ProductNameTextBlock.Text = _localizer.GetProductDisplayName();
         ProductVersionTextBlock.Text = ProductVersionLabel;
         ApplyLocalizationRecursive(this);
+        ApplyLocalizedOverrides();
         ApplyCurrentSection();
 
         if (_lastDoctorReport is null)
@@ -183,6 +193,52 @@ public partial class MainWindow : Window
             DoctorOutputTextBox.Text = _localizer["doctorPlaceholder"];
         }
     }
+
+    private void ApplyLocalizedOverrides()
+    {
+        ManagedJdkInstallRootLabelTextBlock.Text = Localize(
+            "Managed JDK Install Directory",
+            "受管 JDK 安装目录");
+        ManagedMavenInstallRootLabelTextBlock.Text = Localize(
+            "Managed Maven Install Directory",
+            "受管 Maven 安装目录");
+        SaveManagedRootsButton.Content = Localize(
+            "Save and Migrate Install Directories",
+            "保存并迁移安装目录");
+        LoadMavenSettingsButton.Content = Localize(
+            "Load Current Maven Settings",
+            "读取当前 Maven 配置");
+        MavenRepositoryMigrationCheckBox.Content = Localize(
+            "Move existing local repository contents when the repository directory changes.",
+            "当本地仓库目录变更时，一并迁移已有仓库内容。");
+        UpdateSelectedMirrorButton.Content = Localize(
+            "Update Selected Mirror",
+            "更新选中镜像");
+        ClearMirrorEditorButton.Content = Localize(
+            "Clear Mirror Editor",
+            "清空镜像编辑器");
+        SaveMavenSettingsButton.Content = Localize(
+            "Save Maven Configuration",
+            "保存 Maven 配置");
+        MavenDownloadSourceTitleTextBlock.Text = Localize(
+            "Maven Download Source",
+            "Maven 下载源");
+        MavenDownloadSourceDescriptionTextBlock.Text = Localize(
+            "Version lists stay synced from Apache official metadata. Binary downloads can use the selected source below.",
+            "版本列表始终从 Apache 官方元数据获取，下面只决定实际下载包使用哪个来源。");
+        CustomDownloadSourceTitleTextBlock.Text = Localize(
+            "Custom Download Source",
+            "自定义下载源");
+        AddCustomDownloadSourceButton.Content = Localize(
+            "Add Custom Source",
+            "添加自定义下载源");
+        RemoveSelectedDownloadSourceButton.Content = Localize(
+            "Remove Selected Custom Source",
+            "移除选中自定义下载源");
+    }
+
+    private string Localize(string english, string chinese) =>
+        _localizer.Language == AppLanguage.SimplifiedChinese ? chinese : english;
 
     private void ApplyLanguage(AppLanguage language, bool persistPreference)
     {
@@ -206,10 +262,16 @@ public partial class MainWindow : Window
     private void SelectLanguageOption(AppLanguage language)
     {
         _suppressLanguageSelectionChanged = true;
-        LanguageComboBox.SelectedItem = AppLocalizer.SupportedLanguages
+        LanguageComboBox.SelectedItem = GetLanguageOptions()
             .First(option => option.Language == language);
         _suppressLanguageSelectionChanged = false;
     }
+
+    private static IReadOnlyList<LanguageOption> GetLanguageOptions() =>
+    [
+        new LanguageOption(AppLanguage.English, "English"),
+        new LanguageOption(AppLanguage.SimplifiedChinese, "简体中文")
+    ];
 
     private void PersistLanguagePreference(AppLanguage language)
     {
@@ -265,6 +327,9 @@ public partial class MainWindow : Window
             case WpfButton button when button.Tag is string key:
                 button.Content = _localizer[key];
                 break;
+            case WpfCheckBox checkBox when checkBox.Tag is string key:
+                checkBox.Content = _localizer[key];
+                break;
             case Run run when run.Tag is string key:
                 run.Text = _localizer[key];
                 break;
@@ -279,7 +344,8 @@ public partial class MainWindow : Window
         SidebarScopeTextBlock.Text = _localizer["scopeGlobal"];
         WorkspaceRootTextBlock.Text = _layout.RootDirectory;
         StateFileTextBlock.Text = _layout.StateFile;
-        InstallRootTextBlock.Text = _state.Settings.InstallRoot;
+        ManagedJdkInstallRootTextBox.Text = _state.Settings.ManagedJdkInstallRoot;
+        ManagedMavenInstallRootTextBox.Text = _state.Settings.ManagedMavenInstallRoot;
         PathModeTextBlock.Text = BuildPathModeText();
         AppVersionTextBlock.Text = ProductInfo.Version;
         ShellSyncStatusTextBlock.Text = BuildShellSyncStatusText();
@@ -287,6 +353,7 @@ public partial class MainWindow : Window
         MavenSettingsFilePathTextBox.Text = _state.Settings.MavenSettingsFilePath;
         MavenLocalRepositoryPathTextBox.Text = _state.Settings.MavenLocalRepositoryPath;
         RefreshConfiguredMavenMirrors();
+        RefreshMavenDownloadSources();
 
         var selection = _selectionResolver.Resolve(_state);
         DashboardCurrentJdkTextBlock.Text = selection.Jdk?.DisplayName ?? _localizer["nonePlaceholder"];
@@ -334,11 +401,71 @@ public partial class MainWindow : Window
 
         if (ConfiguredMavenMirrorsListBox.SelectedItem is not MavenMirrorConfiguration selectedMirror)
         {
+            PopulateMavenMirrorEditor(null);
             return;
         }
 
         ConfiguredMavenMirrorsListBox.SelectedItem = _configuredMavenMirrors.FirstOrDefault(mirror =>
             mirror.Id.Equals(selectedMirror.Id, StringComparison.OrdinalIgnoreCase));
+        PopulateMavenMirrorEditor(ConfiguredMavenMirrorsListBox.SelectedItem as MavenMirrorConfiguration);
+    }
+
+    private void RefreshMavenDownloadSources()
+    {
+        _suppressDownloadSourceSelectionChanged = true;
+        _availableMavenDownloadSources.Clear();
+
+        foreach (var source in _mavenSource.BuildAvailableDownloadSources(_state.Settings.CustomMavenDownloadSources))
+        {
+            _availableMavenDownloadSources.Add(source);
+        }
+
+        var selected = _availableMavenDownloadSources.FirstOrDefault(source =>
+                           source.Id.Equals(_state.Settings.PreferredMavenDownloadSourceId, StringComparison.OrdinalIgnoreCase))
+                       ?? _availableMavenDownloadSources.FirstOrDefault();
+        MavenDownloadSourceComboBox.SelectedItem = selected;
+        MavenDownloadSourceBaseUrlTextBlock.Text = selected?.BaseUrl ?? _localizer["nonePlaceholder"];
+        _suppressDownloadSourceSelectionChanged = false;
+    }
+
+    private void PopulateMavenMirrorEditor(MavenMirrorConfiguration? mirror)
+    {
+        if (mirror is null)
+        {
+            CustomMavenMirrorNameTextBox.Clear();
+            CustomMavenMirrorUrlTextBox.Clear();
+            CustomMavenMirrorOfTextBox.Text = "*";
+            return;
+        }
+
+        CustomMavenMirrorNameTextBox.Text = mirror.Name;
+        CustomMavenMirrorUrlTextBox.Text = mirror.Url;
+        CustomMavenMirrorOfTextBox.Text = string.IsNullOrWhiteSpace(mirror.MirrorOf) ? "*" : mirror.MirrorOf;
+    }
+
+    private WorkspaceLayout GetManagedLayout() =>
+        _managedInstallLayoutService.Resolve(_layout, _state.Settings);
+
+    private void SyncMavenSettingsFromFile(bool persistState, string? settingsFilePathOverride = null)
+    {
+        var snapshot = _mavenConfigurationService.ReadSettingsSnapshot(
+            string.IsNullOrWhiteSpace(settingsFilePathOverride)
+                ? _state.Settings.MavenSettingsFilePath
+                : settingsFilePathOverride);
+        _state = _state with
+        {
+            Settings = _state.Settings with
+            {
+                MavenSettingsFilePath = snapshot.SettingsFilePath,
+                MavenLocalRepositoryPath = snapshot.LocalRepositoryPath,
+                MavenMirrors = snapshot.Mirrors
+            }
+        };
+
+        if (persistState)
+        {
+            _stateStore.Save(_layout, _state);
+        }
     }
 
     private static void SelectInstallation(
@@ -802,6 +929,47 @@ public partial class MainWindow : Window
         }
     }
 
+    private async Task ExecuteBusyWithMessageAsync(string busyMessage, Func<Task<string?>> operation, Action<string>? onSuccess = null)
+    {
+        SetBusy(true, busyMessage, _localizer["busyDetailPreparing"], null);
+
+        Exception? failure = null;
+        string? statusText = null;
+
+        try
+        {
+            statusText = await operation();
+        }
+        catch (Exception ex)
+        {
+            failure = ex;
+            statusText = _localizer.Format("statusOperationFailed", ex.Message);
+        }
+        finally
+        {
+            SetBusy(false, null, null, null);
+        }
+
+        if (!string.IsNullOrWhiteSpace(statusText))
+        {
+            SetStatus(statusText);
+            if (failure is null)
+            {
+                onSuccess?.Invoke(statusText);
+            }
+        }
+
+        if (failure is not null)
+        {
+            System.Windows.MessageBox.Show(
+                this,
+                failure.Message,
+                _localizer["errorTitle"],
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+    }
+
     private void SetBusy(bool isBusy, string? message, string? detail, double? progress)
     {
         BusyOverlay.Visibility = isBusy ? Visibility.Visible : Visibility.Collapsed;
@@ -855,6 +1023,11 @@ public partial class MainWindow : Window
     private void ShowValidationWarning(string messageKey)
     {
         var message = _localizer[messageKey];
+        ShowValidationMessage(message);
+    }
+
+    private void ShowValidationMessage(string message)
+    {
         SetStatus(message);
         System.Windows.MessageBox.Show(
             this,
@@ -863,6 +1036,9 @@ public partial class MainWindow : Window
             MessageBoxButton.OK,
             MessageBoxImage.Warning);
     }
+
+    private string FormatLocalized(string english, string chinese, params object?[] args) =>
+        string.Format(CultureInfo.CurrentCulture, Localize(english, chinese), args);
 
     private void OnDashboardNavClicked(object sender, RoutedEventArgs e)
     {
@@ -896,12 +1072,12 @@ public partial class MainWindow : Window
 
     private void OnBrowseJdkImportClicked(object sender, RoutedEventArgs e)
     {
-        BrowseForFolder(JdkImportPathTextBox, "browseJdkDescription");
+        BrowseForFolderByKey(JdkImportPathTextBox, "browseJdkDescription");
     }
 
     private void OnBrowseMavenImportClicked(object sender, RoutedEventArgs e)
     {
-        BrowseForFolder(MavenImportPathTextBox, "browseMavenDescription");
+        BrowseForFolderByKey(MavenImportPathTextBox, "browseMavenDescription");
     }
 
     private void OnBrowseMavenSettingsFileClicked(object sender, RoutedEventArgs e)
@@ -921,10 +1097,24 @@ public partial class MainWindow : Window
 
     private void OnBrowseMavenLocalRepositoryClicked(object sender, RoutedEventArgs e)
     {
-        BrowseForFolder(MavenLocalRepositoryPathTextBox, "browseMavenLocalRepositoryDescription");
+        BrowseForFolderByKey(MavenLocalRepositoryPathTextBox, "browseMavenLocalRepositoryDescription");
     }
 
-    private void BrowseForFolder(WpfTextBox textBox, string descriptionKey)
+    private void OnBrowseManagedJdkInstallRootClicked(object sender, RoutedEventArgs e)
+    {
+        BrowseForFolder(
+            ManagedJdkInstallRootTextBox,
+            Localize("Select a managed JDK install directory", "选择受管 JDK 安装目录"));
+    }
+
+    private void OnBrowseManagedMavenInstallRootClicked(object sender, RoutedEventArgs e)
+    {
+        BrowseForFolder(
+            ManagedMavenInstallRootTextBox,
+            Localize("Select a managed Maven install directory", "选择受管 Maven 安装目录"));
+    }
+
+    private void BrowseForFolderByKey(WpfTextBox textBox, string descriptionKey)
     {
         using var dialog = new Forms.FolderBrowserDialog
         {
@@ -937,6 +1127,35 @@ public partial class MainWindow : Window
         {
             textBox.Text = dialog.SelectedPath;
         }
+    }
+
+    private void BrowseForFolder(WpfTextBox textBox, string description)
+    {
+        using var dialog = new Forms.FolderBrowserDialog
+        {
+            Description = description,
+            ShowNewFolderButton = false,
+            SelectedPath = System.IO.Directory.Exists(textBox.Text) ? textBox.Text : string.Empty
+        };
+
+        if (dialog.ShowDialog() == Forms.DialogResult.OK)
+        {
+            textBox.Text = dialog.SelectedPath;
+        }
+    }
+
+    private async void OnLoadMavenSettingsClicked(object sender, RoutedEventArgs e)
+    {
+        await ExecuteBusyWithMessageAsync(
+            Localize("Loading Maven settings...", "正在读取 Maven 配置..."),
+            async () =>
+            {
+                await Task.Run(() => SyncMavenSettingsFromFile(
+                    persistState: true,
+                    settingsFilePathOverride: MavenSettingsFilePathTextBox.Text.Trim()));
+                RefreshStateBindings(GetSelectedInstallationId(JdkListBox), GetSelectedInstallationId(MavenListBox));
+                return Localize("Loaded current Maven settings.", "已读取当前 Maven 配置。");
+            });
     }
 
     private void OnAddBuiltInMirrorClicked(object sender, RoutedEventArgs e)
@@ -952,27 +1171,15 @@ public partial class MainWindow : Window
 
     private void OnAddCustomMirrorClicked(object sender, RoutedEventArgs e)
     {
-        var name = CustomMavenMirrorNameTextBox.Text.Trim();
-        var url = CustomMavenMirrorUrlTextBox.Text.Trim();
-        var mirrorOf = CustomMavenMirrorOfTextBox.Text.Trim();
-
-        if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(url))
+        var mirror = BuildMirrorFromEditor();
+        if (mirror is null)
         {
             ShowValidationWarning("validationCustomMirror");
             return;
         }
 
-        var mirror = new MavenMirrorConfiguration(
-            Id: BuildMirrorId(name),
-            Name: name,
-            Url: url,
-            MirrorOf: string.IsNullOrWhiteSpace(mirrorOf) ? "*" : mirrorOf,
-            IsBuiltIn: false);
-
         AddMirrorToState(mirror);
-        CustomMavenMirrorNameTextBox.Clear();
-        CustomMavenMirrorUrlTextBox.Clear();
-        CustomMavenMirrorOfTextBox.Text = "*";
+        PopulateMavenMirrorEditor(null);
     }
 
     private void AddMirrorToState(MavenMirrorConfiguration mirror)
@@ -1019,14 +1226,203 @@ public partial class MainWindow : Window
         SetStatus(_localizer.Format("mavenMirrorRemovedStatus", mirror.Name));
     }
 
-    private async void OnApplyMavenSettingsClicked(object sender, RoutedEventArgs e)
+    private void OnConfiguredMavenMirrorSelectionChanged(object sender, WpfSelectionChangedEventArgs e)
     {
-        await ApplyMavenSettingsAsync(migrateRepository: false);
+        PopulateMavenMirrorEditor(ConfiguredMavenMirrorsListBox.SelectedItem as MavenMirrorConfiguration);
     }
 
-    private async void OnMigrateMavenRepositoryClicked(object sender, RoutedEventArgs e)
+    private void OnUpdateSelectedMirrorClicked(object sender, RoutedEventArgs e)
     {
-        await ApplyMavenSettingsAsync(migrateRepository: true);
+        if (ConfiguredMavenMirrorsListBox.SelectedItem is not MavenMirrorConfiguration selectedMirror)
+        {
+            ShowValidationWarning("validationSelectConfiguredMirror");
+            return;
+        }
+
+        var updatedMirror = BuildMirrorFromEditor(selectedMirror.Id, selectedMirror.IsBuiltIn);
+        if (updatedMirror is null)
+        {
+            ShowValidationWarning("validationCustomMirror");
+            return;
+        }
+
+        var mirrors = _state.Settings.MavenMirrors
+            .Select(mirror => mirror.Id.Equals(selectedMirror.Id, StringComparison.OrdinalIgnoreCase) ? updatedMirror : mirror)
+            .OrderBy(mirror => mirror.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        _state = _state with
+        {
+            Settings = _state.Settings with
+            {
+                MavenMirrors = mirrors
+            }
+        };
+
+        _stateStore.Save(_layout, _state);
+        RefreshConfiguredMavenMirrors();
+        ConfiguredMavenMirrorsListBox.SelectedItem = _configuredMavenMirrors.FirstOrDefault(mirror =>
+            mirror.Id.Equals(updatedMirror.Id, StringComparison.OrdinalIgnoreCase));
+        SetStatus(FormatLocalized(
+            "Mirror updated: {0}",
+            "已更新镜像：{0}",
+            updatedMirror.Name));
+    }
+
+    private void OnClearMirrorEditorClicked(object sender, RoutedEventArgs e)
+    {
+        ConfiguredMavenMirrorsListBox.SelectedItem = null;
+        PopulateMavenMirrorEditor(null);
+    }
+
+    private async void OnSaveMavenSettingsClicked(object sender, RoutedEventArgs e)
+    {
+        await ApplyMavenSettingsAsync(MavenRepositoryMigrationCheckBox.IsChecked == true);
+    }
+
+    private void OnMavenDownloadSourceSelectionChanged(object sender, WpfSelectionChangedEventArgs e)
+    {
+        if (_suppressDownloadSourceSelectionChanged || MavenDownloadSourceComboBox.SelectedItem is not MavenDownloadSourceConfiguration source)
+        {
+            return;
+        }
+
+        _state = _state with
+        {
+            Settings = _state.Settings with
+            {
+                PreferredMavenDownloadSourceId = source.Id
+            }
+        };
+
+        _stateStore.Save(_layout, _state);
+        MavenDownloadSourceBaseUrlTextBlock.Text = source.BaseUrl;
+        SetStatus(FormatLocalized(
+            "Maven download source set to: {0}",
+            "Maven 下载源已切换为：{0}",
+            source.Name));
+    }
+
+    private void OnAddCustomDownloadSourceClicked(object sender, RoutedEventArgs e)
+    {
+        var name = CustomMavenDownloadSourceNameTextBox.Text.Trim();
+        var baseUrl = CustomMavenDownloadSourceUrlTextBox.Text.Trim();
+
+        if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(baseUrl))
+        {
+            ShowValidationMessage(Localize(
+                "Enter a download source name and base URL first.",
+                "请先填写下载源名称和基础地址。"));
+            return;
+        }
+
+        var source = new MavenDownloadSourceConfiguration(
+            Id: BuildMirrorId(name),
+            Name: name,
+            BaseUrl: baseUrl.Trim().TrimEnd('/'),
+            IsBuiltIn: false);
+        var customSources = _state.Settings.CustomMavenDownloadSources
+            .Where(existing => !existing.Id.Equals(source.Id, StringComparison.OrdinalIgnoreCase))
+            .Concat([source])
+            .OrderBy(existing => existing.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        _state = _state with
+        {
+            Settings = _state.Settings with
+            {
+                CustomMavenDownloadSources = customSources,
+                PreferredMavenDownloadSourceId = source.Id
+            }
+        };
+
+        _stateStore.Save(_layout, _state);
+        RefreshMavenDownloadSources();
+        CustomMavenDownloadSourceNameTextBox.Clear();
+        CustomMavenDownloadSourceUrlTextBox.Clear();
+        SetStatus(FormatLocalized(
+            "Maven download source set to: {0}",
+            "Maven 下载源已切换为：{0}",
+            source.Name));
+    }
+
+    private void OnRemoveSelectedDownloadSourceClicked(object sender, RoutedEventArgs e)
+    {
+        if (MavenDownloadSourceComboBox.SelectedItem is not MavenDownloadSourceConfiguration source)
+        {
+            ShowValidationMessage(Localize(
+                "Select a download source first.",
+                "请先选择一个下载源。"));
+            return;
+        }
+
+        if (source.IsBuiltIn)
+        {
+            ShowValidationMessage(Localize(
+                "Built-in download sources cannot be removed.",
+                "内置下载源不能移除。"));
+            return;
+        }
+
+        var remainingSources = _state.Settings.CustomMavenDownloadSources
+            .Where(existing => !existing.Id.Equals(source.Id, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        var fallbackSource = _mavenSource.BuildAvailableDownloadSources(remainingSources)
+            .FirstOrDefault(item => item.Id.Equals("apache-official", StringComparison.OrdinalIgnoreCase))
+            ?? _mavenSource.BuildAvailableDownloadSources(remainingSources).First();
+
+        _state = _state with
+        {
+            Settings = _state.Settings with
+            {
+                CustomMavenDownloadSources = remainingSources,
+                PreferredMavenDownloadSourceId = fallbackSource.Id
+            }
+        };
+
+        _stateStore.Save(_layout, _state);
+        RefreshMavenDownloadSources();
+        SetStatus(FormatLocalized(
+            "Removed download source: {0}",
+            "已移除下载源：{0}",
+            source.Name));
+    }
+
+    private async void OnSaveManagedInstallRootsClicked(object sender, RoutedEventArgs e)
+    {
+        var targetJdkRoot = ManagedJdkInstallRootTextBox.Text.Trim();
+        var targetMavenRoot = ManagedMavenInstallRootTextBox.Text.Trim();
+        if (string.IsNullOrWhiteSpace(targetJdkRoot) || string.IsNullOrWhiteSpace(targetMavenRoot))
+        {
+            ShowValidationMessage(Localize(
+                "Provide both the managed JDK and Maven install directories.",
+                "请同时填写受管 JDK 和 Maven 安装目录。"));
+            return;
+        }
+
+        await ExecuteBusyWithMessageAsync(
+            Localize("Migrating managed install directories...", "正在迁移受管安装目录..."),
+            async () =>
+            {
+                var result = await Task.Run(() => _managedInstallLayoutService.MigrateManagedInstallRoots(
+                    _state,
+                    _layout,
+                    targetJdkRoot,
+                    targetMavenRoot));
+
+                _state = result.State;
+                await Task.Run(() => _stateStore.Save(_layout, _state));
+                await Task.Run(() => ApplyActivationWithShellIntegration(_state));
+                InvalidateDoctorOutput();
+                RefreshStateBindings(GetSelectedInstallationId(JdkListBox), GetSelectedInstallationId(MavenListBox));
+
+                return FormatLocalized(
+                    "Managed install directories updated. Migrated {0} JDK(s) and {1} Maven installation(s).",
+                    "受管安装目录已更新，共迁移 {0} 个 JDK、{1} 个 Maven。",
+                    result.MigratedJdks,
+                    result.MigratedMavens);
+            },
+            ShowSuccessDialog);
     }
 
     private async void OnSyncClicked(object sender, RoutedEventArgs e)
@@ -1041,7 +1437,7 @@ public partial class MainWindow : Window
                 var currentState = _state;
                 _state = await Task.Run(() =>
                 {
-                    var snapshot = _discoveryService.Discover(_layout);
+                    var snapshot = _discoveryService.Discover(GetManagedLayout());
                     var updatedState = _catalogService.MergeDiscovered(currentState, snapshot);
                     _stateStore.Save(_layout, updatedState);
                     return updatedState;
@@ -1068,7 +1464,7 @@ public partial class MainWindow : Window
             {
                 var currentState = _state;
                 var result = await Task.Run(() =>
-                    _catalogService.ImportInstallation(currentState, ToolchainKind.Jdk, importPath, _layout));
+                    _catalogService.ImportInstallation(currentState, ToolchainKind.Jdk, importPath, GetManagedLayout()));
 
                 _state = result.State;
                 await Task.Run(() => _stateStore.Save(_layout, _state));
@@ -1094,7 +1490,7 @@ public partial class MainWindow : Window
             {
                 var currentState = _state;
                 var result = await Task.Run(() =>
-                    _catalogService.ImportInstallation(currentState, ToolchainKind.Maven, importPath, _layout));
+                    _catalogService.ImportInstallation(currentState, ToolchainKind.Maven, importPath, GetManagedLayout()));
 
                 _state = result.State;
                 await Task.Run(() => _stateStore.Save(_layout, _state));
@@ -1247,7 +1643,7 @@ public partial class MainWindow : Window
             {
                 ReportBusyStage("busyInstallingJdk", "busyDetailResolvingPackage", 8);
                 var progress = new Progress<PackageInstallProgress>(value => ReportPackageInstallProgress("busyInstallingJdk", value));
-                var installation = await _packageInstallationService.InstallAsync(package, _layout, CancellationToken.None, progress);
+                var installation = await _packageInstallationService.InstallAsync(package, GetManagedLayout(), CancellationToken.None, progress);
                 ReportBusyStage("busyInstallingJdk", "busyDetailRegisteringInstallation", 97);
                 var updatedState = _catalogService.RegisterInstallation(_state, installation);
 
@@ -1294,9 +1690,13 @@ public partial class MainWindow : Window
             async () =>
             {
                 ReportBusyStage("busyInstallingMaven", "busyDetailResolvingPackage", 8);
-                var package = await _mavenSource.ResolveAsync(version, CancellationToken.None);
+                var package = await _mavenSource.ResolveAsync(
+                    version,
+                    CancellationToken.None,
+                    _state.Settings.PreferredMavenDownloadSourceId,
+                    _state.Settings.CustomMavenDownloadSources);
                 var progress = new Progress<PackageInstallProgress>(value => ReportPackageInstallProgress("busyInstallingMaven", value));
-                var installation = await _packageInstallationService.InstallAsync(package, _layout, CancellationToken.None, progress);
+                var installation = await _packageInstallationService.InstallAsync(package, GetManagedLayout(), CancellationToken.None, progress);
                 ReportBusyStage("busyInstallingMaven", "busyDetailRegisteringInstallation", 97);
                 var updatedState = _catalogService.RegisterInstallation(_state, installation);
 
@@ -1349,7 +1749,7 @@ public partial class MainWindow : Window
             async () =>
             {
                 var result = await Task.Run(() =>
-                    _catalogService.RemoveInstallation(_state, kind, installation.Id, _layout, deleteFiles));
+                    _catalogService.RemoveInstallation(_state, kind, installation.Id, GetManagedLayout(), deleteFiles));
 
                 await Task.Run(() => _stateStore.Save(_layout, result.State));
                 _state = result.State;
@@ -1541,6 +1941,24 @@ public partial class MainWindow : Window
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
         }
+    }
+
+    private MavenMirrorConfiguration? BuildMirrorFromEditor(string? existingId = null, bool isBuiltIn = false)
+    {
+        var name = CustomMavenMirrorNameTextBox.Text.Trim();
+        var url = CustomMavenMirrorUrlTextBox.Text.Trim();
+        var mirrorOf = CustomMavenMirrorOfTextBox.Text.Trim();
+        if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(url))
+        {
+            return null;
+        }
+
+        return new MavenMirrorConfiguration(
+            Id: string.IsNullOrWhiteSpace(existingId) ? BuildMirrorId(name) : existingId,
+            Name: name,
+            Url: url.Trim().TrimEnd('/'),
+            MirrorOf: string.IsNullOrWhiteSpace(mirrorOf) ? "*" : mirrorOf,
+            IsBuiltIn: isBuiltIn);
     }
 
     private static string BuildMirrorId(string name)
@@ -1833,7 +2251,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        var scrollViewer = FindAncestor<WpfScrollViewer>(dependencyObject);
+        var scrollViewer = FindAncestors<WpfScrollViewer>(dependencyObject).LastOrDefault();
         if (scrollViewer is null)
         {
             return;
@@ -1856,5 +2274,18 @@ public partial class MainWindow : Window
         }
 
         return null;
+    }
+
+    private static IEnumerable<T> FindAncestors<T>(DependencyObject? current) where T : DependencyObject
+    {
+        while (current is not null)
+        {
+            if (current is T target)
+            {
+                yield return target;
+            }
+
+            current = VisualTreeHelper.GetParent(current);
+        }
     }
 }

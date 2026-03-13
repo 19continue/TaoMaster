@@ -28,6 +28,7 @@ var environmentService = new WindowsUserEnvironmentService();
 var activationService = new SelectionActivationService(selectionResolver, environmentService);
 var shellIntegrationService = new WindowsShellIntegrationService(activationService);
 var doctorService = new DoctorService(selectionResolver, environmentService);
+var managedInstallLayoutService = new ManagedInstallLayoutService();
 var temurinSource = new TemurinJdkPackageSource(httpClient);
 var oracleSource = new OracleJdkPackageSource(httpClient);
 var mavenSource = new ApacheMavenPackageSource(httpClient);
@@ -63,7 +64,7 @@ try
             PrintState(stateStore.EnsureInitialized(layout), layout);
             break;
         case "discover":
-            PrintDiscoverySnapshot(discoveryService.Discover(layout));
+            PrintDiscoverySnapshot(discoveryService.Discover(GetManagedLayout(stateStore.EnsureInitialized(layout))));
             break;
         case "sync":
             RunSync();
@@ -122,7 +123,7 @@ void RunInit()
 void RunSync()
 {
     var state = stateStore.EnsureInitialized(layout);
-    var snapshot = discoveryService.Discover(layout);
+    var snapshot = discoveryService.Discover(GetManagedLayout(state));
     var updatedState = catalogService.MergeDiscovered(state, snapshot);
 
     stateStore.Save(layout, updatedState);
@@ -166,7 +167,7 @@ void RunImport(string[] cliArgs)
     var kind = ParseToolchainKind(cliArgs[1]);
     var targetPath = string.Join(" ", cliArgs.Skip(2));
     var state = stateStore.EnsureInitialized(layout);
-    var (updatedState, installation) = catalogService.ImportInstallation(state, kind, targetPath, layout);
+    var (updatedState, installation) = catalogService.ImportInstallation(state, kind, targetPath, GetManagedLayout(state));
 
     stateStore.Save(layout, updatedState);
 
@@ -237,7 +238,7 @@ void RunRemove(string[] cliArgs, bool deleteFiles)
     var kind = ParseToolchainKind(cliArgs[1]);
     var id = string.Join(" ", cliArgs.Skip(2)).Trim();
     var state = stateStore.EnsureInitialized(layout);
-    var result = catalogService.RemoveInstallation(state, kind, id, layout, deleteFiles);
+    var result = catalogService.RemoveInstallation(state, kind, id, GetManagedLayout(state), deleteFiles);
 
     stateStore.Save(layout, result.State);
     activationService.Apply(result.State);
@@ -403,6 +404,7 @@ async Task RunInstallAsync(string[] cliArgs)
     var kind = ParseToolchainKind(cliArgs[1]);
     var switchAfterInstall = HasFlag(cliArgs, "--switch");
     var state = stateStore.EnsureInitialized(layout);
+    var managedLayout = GetManagedLayout(state);
 
     var package = kind switch
     {
@@ -412,7 +414,7 @@ async Task RunInstallAsync(string[] cliArgs)
     };
 
     Console.WriteLine($"开始下载并安装: {package.DisplayName}");
-    var installation = await packageInstallationService.InstallAsync(package, layout, CancellationToken.None);
+    var installation = await packageInstallationService.InstallAsync(package, managedLayout, CancellationToken.None);
     var updatedState = catalogService.RegisterInstallation(state, installation);
 
     if (switchAfterInstall)
@@ -464,9 +466,17 @@ async Task<RemotePackageDescriptor> ResolveJdkPackageAsync(string[] cliArgs)
 
 async Task<RemotePackageDescriptor> ResolveMavenPackageAsync(string[] cliArgs)
 {
+    var state = stateStore.EnsureInitialized(layout);
     var version = GetOptionValue(cliArgs, "--version");
-    return await mavenSource.ResolveAsync(version, CancellationToken.None);
+    return await mavenSource.ResolveAsync(
+        version,
+        CancellationToken.None,
+        state.Settings.PreferredMavenDownloadSourceId,
+        state.Settings.CustomMavenDownloadSources);
 }
+
+WorkspaceLayout GetManagedLayout(ManagerState state) =>
+    managedInstallLayoutService.Resolve(layout, state.Settings);
 
 static ToolchainKind ParseToolchainKind(string value) =>
     value.ToLowerInvariant() switch
