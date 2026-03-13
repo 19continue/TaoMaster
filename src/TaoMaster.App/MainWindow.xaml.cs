@@ -81,8 +81,8 @@ public partial class MainWindow : Window
         var zipExtractionService = new ZipExtractionService();
         _packageInstallationService = new PackageInstallationService(downloadService, checksumService, zipExtractionService, inspector);
 
-        _state = ManagerState.CreateDefault(_layout);
-        _localizer = new AppLocalizer(AppLocalizer.DetectDefaultLanguage(System.Globalization.CultureInfo.CurrentUICulture));
+        _state = _stateStore.EnsureInitialized(_layout);
+        _localizer = CreateInitialLocalizer(_state);
 
         InitializeComponent();
         ActivityListBox.ItemsSource = _activityEntries;
@@ -112,15 +112,23 @@ public partial class MainWindow : Window
             "busyLoadingWorkspace",
             async () =>
             {
-                _state = await Task.Run(() => _stateStore.EnsureInitialized(_layout));
                 _shellIntegrationStatus = await Task.Run(() => _shellIntegrationService.EnsureEnabled(_layout, _state));
-                ApplyPersistedLanguagePreference();
                 RefreshStateBindings();
 
                 await RefreshRemoteVersionsCoreAsync();
 
                 return _localizer.Format("workspaceLoadedStatus", _state.Jdks.Count, _state.Mavens.Count);
             });
+    }
+
+    private static AppLocalizer CreateInitialLocalizer(ManagerState state)
+    {
+        if (AppLocalizer.TryParseLanguage(state.Settings.PreferredUiLanguage, out var persistedLanguage))
+        {
+            return new AppLocalizer(persistedLanguage);
+        }
+
+        return new AppLocalizer(AppLocalizer.DetectDefaultLanguage(System.Globalization.CultureInfo.CurrentUICulture));
     }
 
     private void ApplyActivationWithShellIntegration(ManagerState state)
@@ -162,16 +170,6 @@ public partial class MainWindow : Window
         {
             DoctorOutputTextBox.Text = _localizer["doctorPlaceholder"];
         }
-    }
-
-    private void ApplyPersistedLanguagePreference()
-    {
-        if (!AppLocalizer.TryParseLanguage(_state.Settings.PreferredUiLanguage, out var persistedLanguage))
-        {
-            return;
-        }
-
-        ApplyLanguage(persistedLanguage, persistPreference: false);
     }
 
     private void ApplyLanguage(AppLanguage language, bool persistPreference)
@@ -573,6 +571,57 @@ public partial class MainWindow : Window
         return _localizer["dashboardInsightHealthy"];
     }
 
+    private void ReportPackageInstallProgress(string operationKey, PackageInstallProgress progress)
+    {
+        switch (progress.Stage)
+        {
+            case PackageInstallStage.Downloading:
+                var progressValue = progress.TotalBytes is > 0
+                    ? 18d + (double)progress.BytesReceived / progress.TotalBytes.Value * 52d
+                    : (double?)null;
+                var receivedText = FormatByteSize(progress.BytesReceived);
+                if (progress.TotalBytes is > 0)
+                {
+                    ReportBusyStage(
+                        operationKey,
+                        "busyDetailDownloadingKnown",
+                        progressValue,
+                        receivedText,
+                        FormatByteSize(progress.TotalBytes.Value));
+                }
+                else
+                {
+                    ReportBusyStage(operationKey, "busyDetailDownloadingUnknown", progressValue, receivedText);
+                }
+
+                break;
+            case PackageInstallStage.Verifying:
+                ReportBusyStage(operationKey, "busyDetailVerifyingPackage", 78);
+                break;
+            case PackageInstallStage.Extracting:
+                ReportBusyStage(operationKey, "busyDetailExtractingPackage", 88);
+                break;
+            case PackageInstallStage.Completed:
+                ReportBusyStage(operationKey, "busyDetailFinishingInstall", 96);
+                break;
+        }
+    }
+
+    private static string FormatByteSize(long bytes)
+    {
+        string[] units = ["B", "KB", "MB", "GB"];
+        double value = bytes;
+        var unitIndex = 0;
+
+        while (value >= 1024 && unitIndex < units.Length - 1)
+        {
+            value /= 1024;
+            unitIndex++;
+        }
+
+        return $"{value:0.##} {units[unitIndex]}";
+    }
+
     private async Task RefreshRemoteVersionsCoreAsync()
     {
         var currentJdkVersion = RemoteJdkVersionComboBox.SelectedItem as int?;
@@ -611,9 +660,27 @@ public partial class MainWindow : Window
         }
     }
 
+    private void ReportBusyStage(string messageKey, string? detailKey = null, double? progress = null, params object?[] detailArgs)
+    {
+        var message = _localizer[messageKey];
+        var detail = string.IsNullOrWhiteSpace(detailKey)
+            ? null
+            : detailArgs.Length == 0
+                ? _localizer[detailKey]
+                : _localizer.Format(detailKey, detailArgs);
+
+        if (!Dispatcher.CheckAccess())
+        {
+            Dispatcher.Invoke(() => SetBusy(true, message, detail, progress));
+            return;
+        }
+
+        SetBusy(true, message, detail, progress);
+    }
+
     private async Task ExecuteBusyAsync(string busyKey, Func<Task<string?>> operation)
     {
-        SetBusy(true, _localizer[busyKey]);
+        SetBusy(true, _localizer[busyKey], _localizer["busyDetailPreparing"], null);
 
         Exception? failure = null;
         string? statusText = null;
@@ -629,7 +696,7 @@ public partial class MainWindow : Window
         }
         finally
         {
-            SetBusy(false, null);
+            SetBusy(false, null, null, null);
         }
 
         if (!string.IsNullOrWhiteSpace(statusText))
@@ -648,10 +715,13 @@ public partial class MainWindow : Window
         }
     }
 
-    private void SetBusy(bool isBusy, string? message)
+    private void SetBusy(bool isBusy, string? message, string? detail, double? progress)
     {
         BusyOverlay.Visibility = isBusy ? Visibility.Visible : Visibility.Collapsed;
         BusyTextBlock.Text = message ?? string.Empty;
+        BusyDetailTextBlock.Text = detail ?? string.Empty;
+        BusyProgressBar.IsIndeterminate = progress is null;
+        BusyProgressBar.Value = progress is null ? 12 : Math.Clamp(progress.Value, 0, 100);
     }
 
     private void SetStatus(string message)
@@ -874,10 +944,12 @@ public partial class MainWindow : Window
 
     private async Task SwitchInstallationAsync(ToolchainKind kind, ManagedInstallation installation)
     {
+        var operationKey = kind == ToolchainKind.Jdk ? "busySwitchingJdk" : "busySwitchingMaven";
         await ExecuteBusyAsync(
-            kind == ToolchainKind.Jdk ? "busySwitchingJdk" : "busySwitchingMaven",
+            operationKey,
             async () =>
             {
+                ReportBusyStage(operationKey, "busyDetailPreparingSwitch", 14);
                 var updatedState = kind switch
                 {
                     ToolchainKind.Jdk => _state with
@@ -891,11 +963,15 @@ public partial class MainWindow : Window
                     _ => _state
                 };
 
+                ReportBusyStage(operationKey, "busyDetailApplyingEnvironment", 46);
                 await Task.Run(() => ApplyActivationWithShellIntegration(updatedState));
+                ReportBusyStage(operationKey, "busyDetailSyncingShells", 72);
                 await Task.Run(() => _stateStore.Save(_layout, updatedState));
+                ReportBusyStage(operationKey, "busyDetailSavingState", 88);
 
                 _state = updatedState;
                 InvalidateDoctorOutput();
+                ReportBusyStage(operationKey, "busyDetailRefreshingUi", 96);
                 RefreshStateBindings(
                     kind == ToolchainKind.Jdk ? installation.Id : GetSelectedInstallationId(JdkListBox),
                     kind == ToolchainKind.Maven ? installation.Id : GetSelectedInstallationId(MavenListBox));
@@ -960,8 +1036,11 @@ public partial class MainWindow : Window
             "busyInstallingJdk",
             async () =>
             {
+                ReportBusyStage("busyInstallingJdk", "busyDetailResolvingPackage", 8);
                 var package = await _temurinSource.ResolveLatestAsync(featureVersion, "x64", CancellationToken.None);
-                var installation = await _packageInstallationService.InstallAsync(package, _layout, CancellationToken.None);
+                var progress = new Progress<PackageInstallProgress>(value => ReportPackageInstallProgress("busyInstallingJdk", value));
+                var installation = await _packageInstallationService.InstallAsync(package, _layout, CancellationToken.None, progress);
+                ReportBusyStage("busyInstallingJdk", "busyDetailRegisteringInstallation", 97);
                 var updatedState = _catalogService.RegisterInstallation(_state, installation);
 
                 if (switchAfterInstall)
@@ -971,13 +1050,16 @@ public partial class MainWindow : Window
                         ActiveSelection = updatedState.ActiveSelection with { JdkId = installation.Id }
                     };
 
+                    ReportBusyStage("busyInstallingJdk", "busyDetailActivatingSelection", 98);
                     await Task.Run(() => ApplyActivationWithShellIntegration(updatedState));
                 }
 
+                ReportBusyStage("busyInstallingJdk", "busyDetailSavingState", 99);
                 await Task.Run(() => _stateStore.Save(_layout, updatedState));
 
                 _state = updatedState;
                 InvalidateDoctorOutput();
+                ReportBusyStage("busyInstallingJdk", "busyDetailRefreshingUi", 100);
                 RefreshStateBindings(installation.Id, preferredMavenId);
 
                 var statusKey = switchAfterInstall ? "jdkInstalledAndActivatedStatus" : "jdkInstalledStatus";
@@ -999,8 +1081,11 @@ public partial class MainWindow : Window
             "busyInstallingMaven",
             async () =>
             {
+                ReportBusyStage("busyInstallingMaven", "busyDetailResolvingPackage", 8);
                 var package = await _mavenSource.ResolveAsync(version, CancellationToken.None);
-                var installation = await _packageInstallationService.InstallAsync(package, _layout, CancellationToken.None);
+                var progress = new Progress<PackageInstallProgress>(value => ReportPackageInstallProgress("busyInstallingMaven", value));
+                var installation = await _packageInstallationService.InstallAsync(package, _layout, CancellationToken.None, progress);
+                ReportBusyStage("busyInstallingMaven", "busyDetailRegisteringInstallation", 97);
                 var updatedState = _catalogService.RegisterInstallation(_state, installation);
 
                 if (switchAfterInstall)
@@ -1010,13 +1095,16 @@ public partial class MainWindow : Window
                         ActiveSelection = updatedState.ActiveSelection with { MavenId = installation.Id }
                     };
 
+                    ReportBusyStage("busyInstallingMaven", "busyDetailActivatingSelection", 98);
                     await Task.Run(() => ApplyActivationWithShellIntegration(updatedState));
                 }
 
+                ReportBusyStage("busyInstallingMaven", "busyDetailSavingState", 99);
                 await Task.Run(() => _stateStore.Save(_layout, updatedState));
 
                 _state = updatedState;
                 InvalidateDoctorOutput();
+                ReportBusyStage("busyInstallingMaven", "busyDetailRefreshingUi", 100);
                 RefreshStateBindings(preferredJdkId, installation.Id);
 
                 var statusKey = switchAfterInstall ? "mavenInstalledAndActivatedStatus" : "mavenInstalledStatus";

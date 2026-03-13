@@ -14,6 +14,7 @@ public sealed class WorkspaceInitializer
         Directory.CreateDirectory(layout.LogRoot);
         Directory.CreateDirectory(layout.ScriptRoot);
         NormalizeLegacyStatePaths(layout, legacyRoot);
+        CleanupLegacyWorkspaceIfNeeded(layout, legacyRoot);
     }
 
     private static void MigrateLegacyWorkspaceIfNeeded(WorkspaceLayout layout, string legacyRoot)
@@ -64,6 +65,25 @@ public sealed class WorkspaceInitializer
         catch
         {
             // Best-effort normalization: a stale state file should not block startup.
+        }
+    }
+
+    private static void CleanupLegacyWorkspaceIfNeeded(WorkspaceLayout layout, string legacyRoot)
+    {
+        if (string.Equals(layout.RootDirectory, legacyRoot, StringComparison.OrdinalIgnoreCase)
+            || !Directory.Exists(layout.RootDirectory)
+            || !Directory.Exists(legacyRoot))
+        {
+            return;
+        }
+
+        try
+        {
+            Directory.Delete(legacyRoot, recursive: true);
+        }
+        catch
+        {
+            // Best-effort cleanup: a stale legacy workspace should not block startup.
         }
     }
 

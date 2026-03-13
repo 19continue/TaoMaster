@@ -1353,9 +1353,9 @@
                         Visibility="Collapsed"
                         Panel.ZIndex="30">
                     <Grid>
-                        <Border Width="340"
-                                Padding="22"
-                                CornerRadius="20"
+                        <Border Width="360"
+                                Padding="24"
+                                CornerRadius="18"
                                 Background="#11201A"
                                 HorizontalAlignment="Center"
                                 VerticalAlignment="Center">
@@ -1367,10 +1367,28 @@
                                            Foreground="#F6FBF8"
                                            Text="Working" />
                                 <TextBlock x:Name="BusyTextBlock"
-                                           Margin="0,10,0,0"
-                                           Foreground="#C7D5CE"
+                                           Margin="0,12,0,0"
+                                           FontSize="14"
+                                           FontWeight="SemiBold"
+                                           Foreground="#EAF3EF"
                                            TextWrapping="Wrap"
                                            Text="Please wait..." />
+                                <TextBlock x:Name="BusyDetailTextBlock"
+                                           Margin="0,8,0,0"
+                                           Foreground="#C7D5CE"
+                                           FontSize="12.5"
+                                           TextWrapping="Wrap"
+                                           Text="Preparing..." />
+                                <ProgressBar x:Name="BusyProgressBar"
+                                             Margin="0,16,0,0"
+                                             Height="8"
+                                             Minimum="0"
+                                             Maximum="100"
+                                             Value="12"
+                                             IsIndeterminate="True"
+                                             Foreground="{StaticResource AccentBrush}"
+                                             Background="#294237"
+                                             BorderThickness="0" />
                             </StackPanel>
                         </Border>
                     </Grid>

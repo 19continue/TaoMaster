@@ -25,26 +25,33 @@ public sealed class PackageInstallationService
     public async Task<ManagedInstallation> InstallAsync(
         RemotePackageDescriptor package,
         WorkspaceLayout layout,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IProgress<PackageInstallProgress>? progress = null)
     {
         var installRoot = package.Kind == ToolchainKind.Jdk ? layout.JdkRoot : layout.MavenRoot;
         var preferredDirectory = Path.Combine(installRoot, package.SuggestedInstallDirectoryName);
 
         if (Directory.Exists(preferredDirectory))
         {
-            return ValidateInstalledDirectory(package.Kind, preferredDirectory, layout, "download");
+            var existingInstallation = ValidateInstalledDirectory(package.Kind, preferredDirectory, layout, "download");
+            progress?.Report(new PackageInstallProgress(PackageInstallStage.Completed));
+            return existingInstallation;
         }
 
         var finalDirectory = GetUniqueInstallDirectory(installRoot, package.SuggestedInstallDirectoryName);
 
         var cacheFile = Path.Combine(layout.CacheRoot, package.FileName);
-        await _downloadService.DownloadAsync(package.DownloadUrl, cacheFile, cancellationToken);
+        await _downloadService.DownloadAsync(package.DownloadUrl, cacheFile, cancellationToken, progress);
+        progress?.Report(new PackageInstallProgress(PackageInstallStage.Verifying));
         await _checksumService.VerifyAsync(cacheFile, package.Checksum, package.ChecksumAlgorithm, cancellationToken);
 
+        progress?.Report(new PackageInstallProgress(PackageInstallStage.Extracting));
         var extractedRoot = _zipExtractionService.ExtractPackageRoot(cacheFile, layout.TempRoot);
         Directory.Move(extractedRoot, finalDirectory);
 
-        return ValidateInstalledDirectory(package.Kind, finalDirectory, layout, "download");
+        var installation = ValidateInstalledDirectory(package.Kind, finalDirectory, layout, "download");
+        progress?.Report(new PackageInstallProgress(PackageInstallStage.Completed));
+        return installation;
     }
 
     private ManagedInstallation ValidateInstalledDirectory(

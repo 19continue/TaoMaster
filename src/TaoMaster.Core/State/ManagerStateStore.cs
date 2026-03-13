@@ -45,10 +45,19 @@ public sealed class ManagerStateStore
     {
         _workspaceInitializer.EnsureCreated(layout);
 
-        using var stream = File.OpenRead(layout.StateFile);
-        var state = JsonSerializer.Deserialize<ManagerState>(stream, JsonOptions);
+        ManagerState? state;
+        using (var stream = File.OpenRead(layout.StateFile))
+        {
+            state = JsonSerializer.Deserialize<ManagerState>(stream, JsonOptions);
+        }
 
-        return state ?? ManagerState.CreateDefault(layout);
+        var normalizedState = NormalizeState(state ?? ManagerState.CreateDefault(layout), layout);
+        if (!EqualityComparer<ManagerState>.Default.Equals(state, normalizedState))
+        {
+            Save(layout, normalizedState);
+        }
+
+        return normalizedState;
     }
 
     public void Save(WorkspaceLayout layout, ManagerState state)
@@ -57,5 +66,30 @@ public sealed class ManagerStateStore
 
         using var stream = File.Create(layout.StateFile);
         JsonSerializer.Serialize(stream, state, JsonOptions);
+    }
+
+    private static ManagerState NormalizeState(ManagerState state, WorkspaceLayout layout)
+    {
+        var settings = state.Settings;
+        var normalizedPathMode = string.IsNullOrWhiteSpace(settings.PathMode)
+                                 || settings.PathMode.Equals("managed-segments", StringComparison.OrdinalIgnoreCase)
+            ? "managed-shell-sync"
+            : settings.PathMode;
+
+        if (normalizedPathMode == settings.PathMode)
+        {
+            return state;
+        }
+
+        return state with
+        {
+            Settings = settings with
+            {
+                PathMode = normalizedPathMode,
+                InstallRoot = string.IsNullOrWhiteSpace(settings.InstallRoot) ? layout.RootDirectory : settings.InstallRoot,
+                DownloadCacheRoot = string.IsNullOrWhiteSpace(settings.DownloadCacheRoot) ? layout.CacheRoot : settings.DownloadCacheRoot,
+                TempRoot = string.IsNullOrWhiteSpace(settings.TempRoot) ? layout.TempRoot : settings.TempRoot
+            }
+        };
     }
 }
