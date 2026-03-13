@@ -331,6 +331,7 @@
               Margin="0,20,20,20">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
@@ -394,8 +395,46 @@
                 </Grid>
             </Border>
 
+            <Border x:Name="SuccessNoticeBorder"
+                    Grid.Row="1"
+                    Margin="0,16,0,0"
+                    Padding="16,14"
+                    CornerRadius="14"
+                    Background="{StaticResource AccentSoftBrush}"
+                    BorderBrush="#CFE1D7"
+                    BorderThickness="1"
+                    Visibility="Collapsed">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel>
+                        <TextBlock x:Name="SuccessNoticeTitleTextBlock"
+                                   Tag="successNoticeTitle"
+                                   FontSize="13"
+                                   FontWeight="SemiBold"
+                                   Foreground="{StaticResource AccentBrush}"
+                                   Text="Completed" />
+                        <TextBlock x:Name="SuccessNoticeMessageTextBlock"
+                                   Margin="0,6,0,0"
+                                   FontSize="13.5"
+                                   Foreground="{StaticResource InkBrush}"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+
+                    <Button Grid.Column="1"
+                            Tag="dismissButton"
+                            Content="Dismiss"
+                            Margin="12,0,0,0"
+                            Style="{StaticResource SecondaryButtonStyle}"
+                            Click="OnDismissSuccessNoticeClicked" />
+                </Grid>
+            </Border>
+
             <Grid x:Name="ContentHost"
-                  Grid.Row="1"
+                  Grid.Row="2"
                   Margin="0,24,0,0">
                 <ScrollViewer x:Name="DashboardPage"
                               VerticalScrollBarVisibility="Auto">
@@ -562,10 +601,6 @@
                                                     Content="Versions"
                                                     Style="{StaticResource SecondaryButtonStyle}"
                                                     Click="OnVersionsNavClicked" />
-                                            <Button Tag="navDiagnostics"
-                                                    Content="Diagnostics"
-                                                    Style="{StaticResource SecondaryButtonStyle}"
-                                                    Click="OnDiagnosticsNavClicked" />
                                         </WrapPanel>
                                     </StackPanel>
                                 </Border>
@@ -582,7 +617,8 @@
 
                                         <ListBox x:Name="ActivityListBox"
                                                  MinHeight="220"
-                                                 Style="{StaticResource CleanListBoxStyle}">
+                                                 Style="{StaticResource CleanListBoxStyle}"
+                                                 PreviewMouseWheel="OnEmbeddedListPreviewMouseWheel">
                                             <ListBox.ItemTemplate>
                                                 <DataTemplate>
                                                     <Border Margin="0,0,0,10"
@@ -824,6 +860,7 @@
                                     <ListBox x:Name="JdkListBox"
                                              MinHeight="250"
                                              Style="{StaticResource CleanListBoxStyle}"
+                                             PreviewMouseWheel="OnEmbeddedListPreviewMouseWheel"
                                              ItemContainerStyle="{StaticResource SelectablePanelListItemStyle}">
                                         <ListBox.ItemTemplate>
                                             <DataTemplate>
@@ -909,6 +946,7 @@
                                     <ListBox x:Name="MavenListBox"
                                              MinHeight="250"
                                              Style="{StaticResource CleanListBoxStyle}"
+                                             PreviewMouseWheel="OnEmbeddedListPreviewMouseWheel"
                                              ItemContainerStyle="{StaticResource SelectablePanelListItemStyle}">
                                         <ListBox.ItemTemplate>
                                             <DataTemplate>
@@ -947,13 +985,30 @@
                         <StackPanel Grid.Column="1">
                             <Border Style="{StaticResource CardStyle}">
                                 <StackPanel>
-                                    <TextBlock Style="{StaticResource SectionTitleStyle}"
-                                               Tag="remoteInstallTitle"
-                                               Text="Install From Remote" />
-                                    <TextBlock Margin="0,10,0,14"
-                                               Tag="remoteInstallDescription"
-                                               Style="{StaticResource BodyTextStyle}"
-                                               Text="Fetch official Temurin JDK and Apache Maven ZIP distributions, verify checksums, extract into the managed workspace, and optionally switch immediately." />
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <StackPanel>
+                                            <TextBlock Style="{StaticResource SectionTitleStyle}"
+                                                       Tag="remoteInstallTitle"
+                                                       Text="Install From Remote" />
+                                            <TextBlock Margin="0,10,0,14"
+                                                       Tag="remoteInstallDescription"
+                                                       Style="{StaticResource BodyTextStyle}"
+                                                       Text="Fetch official Temurin JDK and Apache Maven ZIP distributions, verify checksums, extract into the managed workspace, and optionally switch immediately." />
+                                        </StackPanel>
+
+                                        <Button Grid.Column="1"
+                                                Tag="refreshRemoteButton"
+                                                Content="Refresh Remote Versions"
+                                                HorizontalAlignment="Right"
+                                                VerticalAlignment="Top"
+                                                Style="{StaticResource SecondaryButtonStyle}"
+                                                Click="OnRefreshRemoteClicked" />
+                                    </Grid>
                                     <TextBlock FontWeight="SemiBold"
                                                Tag="temurinJdkLabel"
                                                Foreground="{StaticResource InkBrush}"
@@ -1131,11 +1186,32 @@
                                                 Content="Copy Machine PATH Script"
                                                 Style="{StaticResource SecondaryButtonStyle}"
                                                 Click="OnCopyMachinePathScriptClicked" />
-                                        <Button Tag="refreshRemoteButton"
-                                                Content="Refresh Remote Versions"
-                                                Style="{StaticResource SecondaryButtonStyle}"
-                                                Click="OnRefreshRemoteClicked" />
                                     </WrapPanel>
+                                    <Grid Margin="0,4,0,14">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="1*" />
+                                            <ColumnDefinition Width="1*" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <Border Grid.Column="0"
+                                                Margin="0,0,10,0"
+                                                Padding="12"
+                                                CornerRadius="12"
+                                                Background="{StaticResource PanelAltBrush}">
+                                            <TextBlock Tag="repairUserPathDescription"
+                                                       Style="{StaticResource BodyTextStyle}"
+                                                       Text="Remove old user-scoped JDK and Maven folders that override %JAVA_HOME%\bin or %MAVEN_HOME%\bin." />
+                                        </Border>
+
+                                        <Border Grid.Column="1"
+                                                Padding="12"
+                                                CornerRadius="12"
+                                                Background="{StaticResource PanelAltBrush}">
+                                            <TextBlock Tag="copyMachinePathScriptDescription"
+                                                       Style="{StaticResource BodyTextStyle}"
+                                                       Text="Generate an administrator PowerShell script for machine PATH conflicts that still win before TaoMaster." />
+                                        </Border>
+                                    </Grid>
                                     <TextBox x:Name="DoctorOutputTextBox"
                                              MinHeight="300"
                                              FontFamily="Consolas"

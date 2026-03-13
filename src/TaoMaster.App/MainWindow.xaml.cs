@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Runtime.Versioning;
 using System.Windows;
+using System.Windows.Input;
 using System.Windows.Media;
 using Forms = System.Windows.Forms;
 using TaoMaster.App.Localization;
@@ -14,6 +15,7 @@ using WpfButton = System.Windows.Controls.Button;
 using WpfComboBox = System.Windows.Controls.ComboBox;
 using WpfListBox = System.Windows.Controls.ListBox;
 using WpfSelectionChangedEventArgs = System.Windows.Controls.SelectionChangedEventArgs;
+using WpfScrollViewer = System.Windows.Controls.ScrollViewer;
 using WpfTextBlock = System.Windows.Controls.TextBlock;
 using WpfTextBox = System.Windows.Controls.TextBox;
 using MediaColor = System.Windows.Media.Color;
@@ -128,7 +130,7 @@ public partial class MainWindow : Window
             return new AppLocalizer(persistedLanguage);
         }
 
-        return new AppLocalizer(AppLocalizer.DetectDefaultLanguage(System.Globalization.CultureInfo.CurrentUICulture));
+        return new AppLocalizer(AppLanguage.English);
     }
 
     private void ApplyActivationWithShellIntegration(ManagerState state)
@@ -169,6 +171,11 @@ public partial class MainWindow : Window
         if (_lastDoctorReport is null)
         {
             DoctorOutputTextBox.Text = _localizer["doctorPlaceholder"];
+        }
+
+        if (SuccessNoticeBorder.Visibility == Visibility.Visible)
+        {
+            SuccessNoticeTitleTextBlock.Text = _localizer["successNoticeTitle"];
         }
     }
 
@@ -536,7 +543,7 @@ public partial class MainWindow : Window
                 ? _localizer["shellSyncStatusEnabled"]
                 : _localizer["shellSyncStatusPartial"];
 
-        return string.Join(Environment.NewLine, new[]
+        var lines = new List<string>
         {
             $"{_localizer["snapshotScopeLabel"]}: {_localizer["scopeGlobal"]}",
             $"{_localizer["snapshotSelectedJdkLabel"]}: {selection.Jdk?.Id ?? _localizer["nonePlaceholder"]}",
@@ -544,9 +551,11 @@ public partial class MainWindow : Window
             $"{_localizer["snapshotJavaHomeLabel"]}: {userJavaHome}",
             $"{_localizer["snapshotMavenHomeLabel"]}: {userMavenHome}",
             $"{_localizer["snapshotM2HomeLabel"]}: {userM2Home}",
-            $"{_localizer["snapshotShellSyncLabel"]}: {shellSyncStatus}",
-            $"{_localizer["snapshotPathLabel"]}: {userPath}"
-        });
+            $"{_localizer["snapshotShellSyncLabel"]}: {shellSyncStatus}"
+        };
+
+        lines.AddRange(BuildPathDetailLines(_localizer["snapshotPathLabel"], userPath));
+        return string.Join(Environment.NewLine, lines);
     }
 
     private string BuildDashboardInsight()
@@ -678,7 +687,7 @@ public partial class MainWindow : Window
         SetBusy(true, message, detail, progress);
     }
 
-    private async Task ExecuteBusyAsync(string busyKey, Func<Task<string?>> operation)
+    private async Task ExecuteBusyAsync(string busyKey, Func<Task<string?>> operation, Action<string>? onSuccess = null)
     {
         SetBusy(true, _localizer[busyKey], _localizer["busyDetailPreparing"], null);
 
@@ -702,10 +711,15 @@ public partial class MainWindow : Window
         if (!string.IsNullOrWhiteSpace(statusText))
         {
             SetStatus(statusText);
+            if (failure is null)
+            {
+                onSuccess?.Invoke(statusText);
+            }
         }
 
         if (failure is not null)
         {
+            HideSuccessNotice();
             System.Windows.MessageBox.Show(
                 this,
                 failure.Message,
@@ -733,6 +747,19 @@ public partial class MainWindow : Window
         }
     }
 
+    private void ShowSuccessNotice(string message)
+    {
+        SuccessNoticeTitleTextBlock.Text = _localizer["successNoticeTitle"];
+        SuccessNoticeMessageTextBlock.Text = message;
+        SuccessNoticeBorder.Visibility = Visibility.Visible;
+    }
+
+    private void HideSuccessNotice()
+    {
+        SuccessNoticeMessageTextBlock.Text = string.Empty;
+        SuccessNoticeBorder.Visibility = Visibility.Collapsed;
+    }
+
     private void PushActivity(string message)
     {
         var entry = $"{DateTime.Now:HH:mm}  {message}";
@@ -758,6 +785,7 @@ public partial class MainWindow : Window
     private void ShowValidationWarning(string messageKey)
     {
         var message = _localizer[messageKey];
+        HideSuccessNotice();
         SetStatus(message);
         System.Windows.MessageBox.Show(
             this,
@@ -979,7 +1007,8 @@ public partial class MainWindow : Window
                 return _localizer.Format(
                     kind == ToolchainKind.Jdk ? "jdkSwitchedStatus" : "mavenSwitchedStatus",
                     installation.DisplayName);
-            });
+            },
+            ShowSuccessNotice);
     }
 
     private async void OnRemoveSelectedJdkClicked(object sender, RoutedEventArgs e)
@@ -1030,6 +1059,7 @@ public partial class MainWindow : Window
             return;
         }
 
+        var preferredJdkId = GetSelectedInstallationId(JdkListBox);
         var preferredMavenId = GetSelectedInstallationId(MavenListBox);
 
         await ExecuteBusyAsync(
@@ -1060,11 +1090,14 @@ public partial class MainWindow : Window
                 _state = updatedState;
                 InvalidateDoctorOutput();
                 ReportBusyStage("busyInstallingJdk", "busyDetailRefreshingUi", 100);
-                RefreshStateBindings(installation.Id, preferredMavenId);
+                RefreshStateBindings(
+                    switchAfterInstall ? installation.Id : preferredJdkId,
+                    preferredMavenId);
 
                 var statusKey = switchAfterInstall ? "jdkInstalledAndActivatedStatus" : "jdkInstalledStatus";
                 return _localizer.Format(statusKey, installation.DisplayName);
-            });
+            },
+            ShowSuccessNotice);
     }
 
     private async Task InstallRemoteMavenAsync(bool switchAfterInstall)
@@ -1076,6 +1109,7 @@ public partial class MainWindow : Window
         }
 
         var preferredJdkId = GetSelectedInstallationId(JdkListBox);
+        var preferredMavenId = GetSelectedInstallationId(MavenListBox);
 
         await ExecuteBusyAsync(
             "busyInstallingMaven",
@@ -1105,11 +1139,14 @@ public partial class MainWindow : Window
                 _state = updatedState;
                 InvalidateDoctorOutput();
                 ReportBusyStage("busyInstallingMaven", "busyDetailRefreshingUi", 100);
-                RefreshStateBindings(preferredJdkId, installation.Id);
+                RefreshStateBindings(
+                    preferredJdkId,
+                    switchAfterInstall ? installation.Id : preferredMavenId);
 
                 var statusKey = switchAfterInstall ? "mavenInstalledAndActivatedStatus" : "mavenInstalledStatus";
                 return _localizer.Format(statusKey, installation.DisplayName);
-            });
+            },
+            ShowSuccessNotice);
     }
 
     private async Task RemoveSelectedInstallationAsync(ToolchainKind kind, bool deleteFiles)
@@ -1174,6 +1211,9 @@ public partial class MainWindow : Window
 
     private async void OnRunDoctorClicked(object sender, RoutedEventArgs e)
     {
+        _currentSection = AppSection.Diagnostics;
+        ApplyCurrentSection();
+
         await ExecuteBusyAsync(
             "busyRunningDoctor",
             async () =>
@@ -1275,6 +1315,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
+            HideSuccessNotice();
             SetStatus(_localizer.Format("statusOperationFailed", ex.Message));
             System.Windows.MessageBox.Show(
                 this,
@@ -1431,12 +1472,12 @@ public partial class MainWindow : Window
 
         if (!string.IsNullOrWhiteSpace(expected))
         {
-            lines.Add($"{_localizer["detailExpectedLabel"]}: {expected}");
+            lines.AddRange(BuildDetailLines(_localizer["detailExpectedLabel"], expected));
         }
 
         if (!string.IsNullOrWhiteSpace(actual))
         {
-            lines.Add($"{_localizer["detailActualLabel"]}: {actual}");
+            lines.AddRange(BuildDetailLines(_localizer["detailActualLabel"], actual));
         }
 
         return lines;
@@ -1450,7 +1491,7 @@ public partial class MainWindow : Window
 
         if (!string.IsNullOrWhiteSpace(expected))
         {
-            lines.Add($"{_localizer["detailExpectedLabel"]}: {expected}");
+            lines.AddRange(BuildDetailLines(_localizer["detailExpectedLabel"], expected));
         }
 
         var winningCandidate = candidates.FirstOrDefault();
@@ -1460,9 +1501,9 @@ public partial class MainWindow : Window
             return lines;
         }
 
-        lines.Add($"{_localizer["detailActualLabel"]}: {winningCandidate.CandidatePath}");
+        lines.AddRange(BuildDetailLines(_localizer["detailActualLabel"], winningCandidate.CandidatePath));
         lines.Add($"{_localizer["detailScopeLabel"]}: {_localizer[winningCandidate.Scope == EnvironmentPathScope.Machine ? "pathScopeMachine" : "pathScopeUser"]}");
-        lines.Add($"{_localizer["detailPathEntryLabel"]}: {winningCandidate.OriginalPathSegment}");
+        lines.AddRange(BuildDetailLines(_localizer["detailPathEntryLabel"], winningCandidate.OriginalPathSegment));
 
         var expectedMatched = !string.IsNullOrWhiteSpace(expected)
                               && string.Equals(winningCandidate.CandidatePath, expected, StringComparison.OrdinalIgnoreCase);
@@ -1482,10 +1523,7 @@ public partial class MainWindow : Window
     {
         return string.IsNullOrWhiteSpace(actual)
             ? Array.Empty<string>()
-            :
-            [
-                $"{_localizer["detailActualLabel"]}: {actual}"
-            ];
+            : BuildDetailLines(_localizer["detailActualLabel"], actual);
     }
 
     private IEnumerable<string> BuildOutputDetails(string? output)
@@ -1525,4 +1563,69 @@ public partial class MainWindow : Window
         listBox.SelectedItem is ManagedInstallation installation
             ? installation.Id
             : null;
+
+    private IEnumerable<string> BuildDetailLines(string label, string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return Array.Empty<string>();
+        }
+
+        return value.Contains(';', StringComparison.Ordinal)
+            ? BuildPathDetailLines(label, value)
+            : [$"{label}: {value}"];
+    }
+
+    private IEnumerable<string> BuildPathDetailLines(string label, string value)
+    {
+        var segments = value
+            .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToList();
+
+        if (segments.Count <= 1)
+        {
+            return [$"{label}: {value}"];
+        }
+
+        var lines = new List<string> { $"{label}:" };
+        lines.AddRange(segments.Select(segment => $"  - {segment}"));
+        return lines;
+    }
+
+    private void OnDismissSuccessNoticeClicked(object sender, RoutedEventArgs e)
+    {
+        HideSuccessNotice();
+    }
+
+    private void OnEmbeddedListPreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        if (sender is not DependencyObject dependencyObject)
+        {
+            return;
+        }
+
+        var scrollViewer = FindAncestor<WpfScrollViewer>(dependencyObject);
+        if (scrollViewer is null)
+        {
+            return;
+        }
+
+        scrollViewer.ScrollToVerticalOffset(scrollViewer.VerticalOffset - (e.Delta / 3d));
+        e.Handled = true;
+    }
+
+    private static T? FindAncestor<T>(DependencyObject? current) where T : DependencyObject
+    {
+        while (current is not null)
+        {
+            if (current is T target)
+            {
+                return target;
+            }
+
+            current = VisualTreeHelper.GetParent(current);
+        }
+
+        return null;
+    }
 }

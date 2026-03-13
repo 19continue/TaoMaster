@@ -9,7 +9,7 @@ public sealed record ManagerSettings(
     string PathMode,
     string PreferredJdkProvider,
     string PreferredMavenProvider,
-    string PreferredUiLanguage = "auto")
+    string PreferredUiLanguage = "English")
 {
     public static ManagerSettings CreateDefault(WorkspaceLayout layout) =>
         new(
@@ -19,5 +19,5 @@ public sealed record ManagerSettings(
             PathMode: "managed-shell-sync",
             PreferredJdkProvider: "temurin",
             PreferredMavenProvider: "apache",
-            PreferredUiLanguage: "auto");
+            PreferredUiLanguage: "English");
 }
