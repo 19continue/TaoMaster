@@ -987,6 +987,16 @@
                                                Tag="remoteJdkProviderHint"
                                                Style="{StaticResource BodyTextStyle}"
                                                Text="Remote JDK downloads currently use Temurin. Oracle JDK already supports local discovery and import into TaoMaster." />
+                                    <TextBlock x:Name="RemoteJdkDownloadSourceLabelTextBlock"
+                                               FontWeight="SemiBold"
+                                               Foreground="{StaticResource InkBrush}"
+                                               Text="JDK Download Source" />
+                                    <ComboBox x:Name="RemoteJdkDownloadSourceComboBox"
+                                              Margin="0,10,0,14"
+                                              Height="36"
+                                              DisplayMemberPath="Name"
+                                              Style="{StaticResource InputComboBoxStyle}"
+                                              SelectionChanged="OnRemoteJdkDownloadSourceSelectionChanged" />
                                     <TextBlock FontWeight="SemiBold"
                                                Tag="remoteJdkLabel"
                                                Foreground="{StaticResource InkBrush}"
@@ -1001,8 +1011,23 @@
                                                   Grid.Column="0"
                                                   Height="36"
                                                   Margin="0,0,10,0"
-                                                  DisplayMemberPath="DisplayName"
-                                                  Style="{StaticResource InputComboBoxStyle}" />
+                                                  Style="{StaticResource InputComboBoxStyle}">
+                                            <ComboBox.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="Auto" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock Text="{Binding DisplayName}" />
+                                                        <TextBlock Grid.Column="1"
+                                                                   Margin="10,0,0,0"
+                                                                   Foreground="{StaticResource MutedBrush}"
+                                                                   Text="{Binding AvailabilityMessage}" />
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ComboBox.ItemTemplate>
+                                        </ComboBox>
                                         <Button Grid.Column="1"
                                                 Tag="installButton"
                                                 Content="Install"
@@ -1016,6 +1041,20 @@
                                                 Style="{StaticResource ActionButtonStyle}"
                                                 Click="OnInstallAndUseJdkClicked" />
                                     </Grid>
+                                    <TextBlock x:Name="RemoteJdkAvailabilityHintTextBlock"
+                                               Margin="0,-6,0,16"
+                                               Style="{StaticResource BodyTextStyle}"
+                                               Text="Only versions that can be downloaded by the selected source should be used." />
+                                    <TextBlock x:Name="RemoteMavenDownloadSourceLabelTextBlock"
+                                               FontWeight="SemiBold"
+                                               Foreground="{StaticResource InkBrush}"
+                                               Text="Maven Download Source" />
+                                    <ComboBox x:Name="RemoteMavenDownloadSourceComboBox"
+                                              Margin="0,10,0,14"
+                                              Height="36"
+                                              DisplayMemberPath="Name"
+                                              Style="{StaticResource InputComboBoxStyle}"
+                                              SelectionChanged="OnRemoteMavenDownloadSourceSelectionChanged" />
                                     <TextBlock FontWeight="SemiBold"
                                                Tag="apacheMavenLabel"
                                                Foreground="{StaticResource InkBrush}"
@@ -1030,7 +1069,23 @@
                                                   Grid.Column="0"
                                                   Height="36"
                                                   Margin="0,0,10,0"
-                                                  Style="{StaticResource InputComboBoxStyle}" />
+                                                  Style="{StaticResource InputComboBoxStyle}">
+                                            <ComboBox.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="Auto" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock Text="{Binding DisplayName}" />
+                                                        <TextBlock Grid.Column="1"
+                                                                   Margin="10,0,0,0"
+                                                                   Foreground="{StaticResource MutedBrush}"
+                                                                   Text="{Binding AvailabilityMessage}" />
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ComboBox.ItemTemplate>
+                                        </ComboBox>
                                         <Button Grid.Column="1"
                                                 Tag="installButton"
                                                 Content="Install"
@@ -1044,6 +1099,10 @@
                                                 Style="{StaticResource ActionButtonStyle}"
                                                 Click="OnInstallAndUseMavenClicked" />
                                     </Grid>
+                                    <TextBlock x:Name="RemoteMavenAvailabilityHintTextBlock"
+                                               Margin="0,10,0,0"
+                                               Style="{StaticResource BodyTextStyle}"
+                                               Text="Unavailable versions stay visible so you can tell which mirror is missing which package." />
                                 </StackPanel>
                             </Border>
 
@@ -1296,11 +1355,11 @@
                               VerticalScrollBarVisibility="Auto">
                     <Grid>
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="1*" />
-                            <ColumnDefinition Width="1*" />
+                            <ColumnDefinition Width="1.18*" />
+                            <ColumnDefinition Width="0.82*" />
                         </Grid.ColumnDefinitions>
 
-                        <StackPanel Margin="0,0,18,0">
+                        <StackPanel Margin="0,0,28,0">
                             <Border Style="{StaticResource CardStyle}">
                                 <StackPanel>
                                     <TextBlock Tag="settingsWorkspaceTitle"
@@ -1382,6 +1441,114 @@
                                             Click="OnSaveManagedInstallRootsClicked" />
                                 </StackPanel>
                             </Border>
+
+                            <Border Style="{StaticResource CardStyle}">
+                                <StackPanel>
+                                    <TextBlock x:Name="DownloadSourcesTitleTextBlock"
+                                               Style="{StaticResource SectionTitleStyle}"
+                                               Text="Download Sources" />
+                                    <TextBlock x:Name="DownloadSourcesDescriptionTextBlock"
+                                               Margin="0,10,0,16"
+                                               Style="{StaticResource BodyTextStyle}"
+                                               Text="Manage the active JDK and Maven download mirrors here. Changes are reflected immediately in the remote install page." />
+
+                                    <TextBlock x:Name="SettingsJdkDownloadSourceLabelTextBlock"
+                                               FontWeight="SemiBold"
+                                               Foreground="{StaticResource InkBrush}"
+                                               Text="JDK Download Source" />
+                                    <ComboBox x:Name="SettingsJdkDownloadSourceComboBox"
+                                              Margin="0,8,0,0"
+                                              Height="36"
+                                              DisplayMemberPath="Name"
+                                              Style="{StaticResource InputComboBoxStyle}"
+                                              SelectionChanged="OnSettingsJdkDownloadSourceSelectionChanged" />
+                                    <Grid Margin="0,8,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="1.2*" />
+                                            <ColumnDefinition Width="1.4*" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox x:Name="JdkDownloadSourceNameTextBox"
+                                                 Grid.Column="0"
+                                                 Margin="0,0,10,0"
+                                                 Height="36"
+                                                 Style="{StaticResource InputTextBoxStyle}"
+                                                 VerticalContentAlignment="Center" />
+                                        <TextBox x:Name="JdkDownloadSourceUrlPrefixTextBox"
+                                                 Grid.Column="1"
+                                                 Height="36"
+                                                 Style="{StaticResource InputTextBoxStyle}"
+                                                 VerticalContentAlignment="Center" />
+                                    </Grid>
+                                    <TextBlock x:Name="JdkDownloadSourceProvidersLabelTextBlock"
+                                               Margin="0,8,0,0"
+                                               FontWeight="SemiBold"
+                                               Foreground="{StaticResource InkBrush}"
+                                               Text="Supported Providers" />
+                                    <TextBox x:Name="JdkDownloadSourceProvidersTextBox"
+                                             Margin="0,8,0,0"
+                                             Height="36"
+                                             Style="{StaticResource InputTextBoxStyle}"
+                                             VerticalContentAlignment="Center"
+                                             Text="*" />
+                                    <WrapPanel Margin="0,12,0,0">
+                                        <Button x:Name="UpdateSelectedJdkDownloadSourceButton"
+                                                Content="Update Selected JDK Source"
+                                                Style="{StaticResource SecondaryButtonStyle}"
+                                                Click="OnUpdateSelectedJdkDownloadSourceClicked" />
+                                        <Button x:Name="AddCustomJdkDownloadSourceButton"
+                                                Content="Add Custom JDK Source"
+                                                Style="{StaticResource SecondaryButtonStyle}"
+                                                Click="OnAddCustomJdkDownloadSourceClicked" />
+                                        <Button x:Name="RemoveSelectedJdkDownloadSourceButton"
+                                                Content="Remove Selected JDK Override"
+                                                Style="{StaticResource SecondaryButtonStyle}"
+                                                Click="OnRemoveSelectedJdkDownloadSourceClicked" />
+                                    </WrapPanel>
+
+                                    <TextBlock x:Name="SettingsMavenDownloadSourceLabelTextBlock"
+                                               Margin="0,20,0,0"
+                                               FontWeight="SemiBold"
+                                               Foreground="{StaticResource InkBrush}"
+                                               Text="Maven Download Source" />
+                                    <ComboBox x:Name="SettingsMavenDownloadSourceComboBox"
+                                              Margin="0,8,0,0"
+                                              Height="36"
+                                              DisplayMemberPath="Name"
+                                              Style="{StaticResource InputComboBoxStyle}"
+                                              SelectionChanged="OnSettingsMavenDownloadSourceSelectionChanged" />
+                                    <Grid Margin="0,8,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="1.2*" />
+                                            <ColumnDefinition Width="1.4*" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox x:Name="MavenDownloadSourceNameTextBox"
+                                                 Grid.Column="0"
+                                                 Margin="0,0,10,0"
+                                                 Height="36"
+                                                 Style="{StaticResource InputTextBoxStyle}"
+                                                 VerticalContentAlignment="Center" />
+                                        <TextBox x:Name="MavenDownloadSourceUrlTextBox"
+                                                 Grid.Column="1"
+                                                 Height="36"
+                                                 Style="{StaticResource InputTextBoxStyle}"
+                                                 VerticalContentAlignment="Center" />
+                                    </Grid>
+                                    <WrapPanel Margin="0,12,0,0">
+                                        <Button x:Name="UpdateSelectedMavenDownloadSourceButton"
+                                                Content="Update Selected Maven Source"
+                                                Style="{StaticResource SecondaryButtonStyle}"
+                                                Click="OnUpdateSelectedMavenDownloadSourceClicked" />
+                                        <Button x:Name="AddCustomMavenDownloadSourceButton"
+                                                Content="Add Custom Maven Source"
+                                                Style="{StaticResource SecondaryButtonStyle}"
+                                                Click="OnAddCustomMavenDownloadSourceClicked" />
+                                        <Button x:Name="RemoveSelectedMavenDownloadSourceButton"
+                                                Content="Remove Selected Maven Override"
+                                                Style="{StaticResource SecondaryButtonStyle}"
+                                                Click="OnRemoveSelectedMavenDownloadSourceClicked" />
+                                    </WrapPanel>
+                                </StackPanel>
+                            </Border>
                         </StackPanel>
 
                         <StackPanel Grid.Column="1">
@@ -1451,11 +1618,25 @@
                                                Tag="settingsMavenConfigDescription"
                                                Style="{StaticResource BodyTextStyle}"
                                                Text="Configure settings.xml, migrate the local repository path, and manage Maven download mirrors from one place." />
+                                    <TextBlock x:Name="SettingsConfigurationScopeLabelTextBlock"
+                                               FontWeight="SemiBold"
+                                               Foreground="{StaticResource InkBrush}"
+                                               Text="Configuration Scope" />
+                                    <ComboBox x:Name="MavenConfigurationScopeComboBox"
+                                              Margin="0,8,0,16"
+                                              Height="36"
+                                              DisplayMemberPath="DisplayName"
+                                              Style="{StaticResource InputComboBoxStyle}"
+                                              SelectionChanged="OnMavenConfigurationScopeSelectionChanged" />
                                     <WrapPanel Margin="0,0,0,16">
                                         <Button x:Name="LoadMavenSettingsButton"
-                                                Content="Load Current Maven Settings"
+                                                Content="Load Mirrors From Config File"
                                                 Style="{StaticResource SecondaryButtonStyle}"
                                                 Click="OnLoadMavenSettingsClicked" />
+                                        <Button x:Name="ImportMirrorXmlButton"
+                                                Content="Import Mirror XML"
+                                                Style="{StaticResource SecondaryButtonStyle}"
+                                                Click="OnImportMirrorXmlClicked" />
                                     </WrapPanel>
 
                                     <TextBlock Tag="settingsMavenSettingsPathLabel"
@@ -1465,6 +1646,7 @@
                                     <Grid Margin="0,8,0,0">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
                                         <TextBox x:Name="MavenSettingsFilePathTextBox"
@@ -1479,6 +1661,43 @@
                                                 Width="88"
                                                 Style="{StaticResource SecondaryButtonStyle}"
                                                 Click="OnBrowseMavenSettingsFileClicked" />
+                                        <Button Grid.Column="2"
+                                                x:Name="OpenMavenSettingsFileButton"
+                                                Content="Open"
+                                                Width="88"
+                                                Style="{StaticResource SecondaryButtonStyle}"
+                                                Click="OnOpenMavenSettingsFileClicked" />
+                                    </Grid>
+
+                                    <TextBlock x:Name="SettingsToolchainsFilePathLabelTextBlock"
+                                               Margin="0,16,0,0"
+                                               FontWeight="SemiBold"
+                                               Foreground="{StaticResource InkBrush}"
+                                               Text="toolchains.xml Path" />
+                                    <Grid Margin="0,8,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox x:Name="MavenToolchainsFilePathTextBox"
+                                                 Grid.Column="0"
+                                                 Height="36"
+                                                 Margin="0,0,10,0"
+                                                 Style="{StaticResource InputTextBoxStyle}"
+                                                 VerticalContentAlignment="Center" />
+                                        <Button Grid.Column="1"
+                                                Tag="browseButton"
+                                                Content="Browse"
+                                                Width="88"
+                                                Style="{StaticResource SecondaryButtonStyle}"
+                                                Click="OnBrowseMavenToolchainsFileClicked" />
+                                        <Button Grid.Column="2"
+                                                x:Name="OpenMavenToolchainsFileButton"
+                                                Content="Open"
+                                                Width="88"
+                                                Style="{StaticResource SecondaryButtonStyle}"
+                                                Click="OnOpenMavenToolchainsFileClicked" />
                                     </Grid>
 
                                     <TextBlock Margin="0,16,0,0"
@@ -1628,10 +1847,6 @@
                                                 Content="Update Selected Mirror"
                                                 Style="{StaticResource SecondaryButtonStyle}"
                                                 Click="OnUpdateSelectedMirrorClicked" />
-                                        <Button x:Name="ClearMirrorEditorButton"
-                                                Content="Clear Mirror Editor"
-                                                Style="{StaticResource SecondaryButtonStyle}"
-                                                Click="OnClearMirrorEditorClicked" />
                                         <Button Tag="removeSelectedMirrorButton"
                                                 Content="Remove Selected Mirror"
                                                 Style="{StaticResource SecondaryButtonStyle}"
@@ -1641,69 +1856,17 @@
                                                 Style="{StaticResource ActionButtonStyle}"
                                                 Click="OnSaveMavenSettingsClicked" />
                                     </WrapPanel>
-
-                                    <TextBlock x:Name="MavenDownloadSourceTitleTextBlock"
-                                               Margin="0,20,0,0"
-                                               FontWeight="SemiBold"
-                                               Foreground="{StaticResource InkBrush}"
-                                               Text="Maven Download Source" />
-                                    <TextBlock x:Name="MavenDownloadSourceDescriptionTextBlock"
-                                               Margin="0,8,0,0"
-                                               Style="{StaticResource BodyTextStyle}"
-                                               Text="Version lists stay synced from Apache official metadata. Binary downloads can use the selected source below." />
-                                    <ComboBox x:Name="MavenDownloadSourceComboBox"
-                                              Margin="0,8,0,0"
-                                              Height="36"
-                                              DisplayMemberPath="Name"
-                                              Style="{StaticResource InputComboBoxStyle}"
-                                              SelectionChanged="OnMavenDownloadSourceSelectionChanged" />
-                                    <TextBlock x:Name="MavenDownloadSourceBaseUrlTextBlock"
-                                               Margin="0,8,0,0"
-                                               FontFamily="Consolas"
-                                               FontSize="12.5"
-                                               Foreground="{StaticResource MutedBrush}"
-                                               TextWrapping="Wrap" />
-
-                                    <TextBlock x:Name="CustomDownloadSourceTitleTextBlock"
-                                               Margin="0,16,0,0"
-                                               FontWeight="SemiBold"
-                                               Foreground="{StaticResource InkBrush}"
-                                               Text="Custom Download Source" />
-                                    <Grid Margin="0,8,0,0">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="1.1*" />
-                                            <ColumnDefinition Width="1.6*" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-                                        <TextBox x:Name="CustomMavenDownloadSourceNameTextBox"
-                                                 Grid.Column="0"
-                                                 Height="36"
-                                                 Margin="0,0,10,0"
-                                                 Style="{StaticResource InputTextBoxStyle}"
-                                                 VerticalContentAlignment="Center" />
-                                        <TextBox x:Name="CustomMavenDownloadSourceUrlTextBox"
-                                                 Grid.Column="1"
-                                                 Height="36"
-                                                 Margin="0,0,10,0"
-                                                 Style="{StaticResource InputTextBoxStyle}"
-                                                 VerticalContentAlignment="Center" />
-                                        <Button x:Name="AddCustomDownloadSourceButton"
-                                                Grid.Column="2"
-                                                Content="Add Custom Source"
-                                                Style="{StaticResource SecondaryButtonStyle}"
-                                                Click="OnAddCustomDownloadSourceClicked" />
-                                    </Grid>
-                                    <WrapPanel Margin="0,12,0,0">
-                                        <Button x:Name="RemoveSelectedDownloadSourceButton"
-                                                Content="Remove Selected Custom Source"
-                                                Style="{StaticResource SecondaryButtonStyle}"
-                                                Click="OnRemoveSelectedDownloadSourceClicked" />
-                                    </WrapPanel>
                                 </StackPanel>
                             </Border>
                         </StackPanel>
                     </Grid>
                 </ScrollViewer>
+                <StackPanel Visibility="Collapsed">
+                    <ComboBox x:Name="MavenDownloadSourceComboBox" />
+                    <TextBlock x:Name="MavenDownloadSourceBaseUrlTextBlock" />
+                    <TextBox x:Name="CustomMavenDownloadSourceNameTextBox" />
+                    <TextBox x:Name="CustomMavenDownloadSourceUrlTextBox" />
+                </StackPanel>
                 <Border x:Name="BusyOverlay"
                         Background="#88E8ECE8"
                         Visibility="Collapsed"

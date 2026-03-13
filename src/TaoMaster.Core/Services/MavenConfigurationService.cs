@@ -7,14 +7,14 @@ public sealed class MavenConfigurationService
 {
     private static readonly XNamespace SettingsNamespace = "http://maven.apache.org/SETTINGS/1.2.0";
     private static readonly XNamespace XmlSchemaNamespace = "http://www.w3.org/2001/XMLSchema-instance";
+    private static readonly XNamespace ToolchainsNamespace = "http://maven.apache.org/TOOLCHAINS/1.1.0";
 
     public IReadOnlyList<MavenMirrorConfiguration> GetBuiltInMirrors() =>
     [
         new MavenMirrorConfiguration("aliyun-public", "Aliyun Public", "https://maven.aliyun.com/repository/public", "*", true),
         new MavenMirrorConfiguration("tencent-public", "Tencent Public", "https://mirrors.cloud.tencent.com/nexus/repository/maven-public/", "*", true),
         new MavenMirrorConfiguration("huawei-public", "Huawei Public", "https://repo.huaweicloud.com/repository/maven/", "*", true),
-        new MavenMirrorConfiguration("tuna-central", "Tsinghua TUNA", "https://mirrors.tuna.tsinghua.edu.cn/maven/", "central", true),
-        new MavenMirrorConfiguration("ustc-central", "USTC Central", "https://mirrors.ustc.edu.cn/maven-central/", "central", true)
+        new MavenMirrorConfiguration("tuna-central", "Tsinghua TUNA", "https://mirrors.tuna.tsinghua.edu.cn/maven/", "central", true)
     ];
 
     public IReadOnlyList<MavenDownloadSourceConfiguration> GetBuiltInDownloadSources() =>
@@ -24,9 +24,18 @@ public sealed class MavenConfigurationService
         new MavenDownloadSourceConfiguration("aliyun-apache", "Aliyun Apache Mirror", "https://mirrors.aliyun.com/apache/maven/maven-3", true),
         new MavenDownloadSourceConfiguration("tencent-apache", "Tencent Apache Mirror", "https://mirrors.cloud.tencent.com/apache/maven/maven-3", true),
         new MavenDownloadSourceConfiguration("huawei-apache", "Huawei Apache Mirror", "https://mirrors.huaweicloud.com/apache/maven/maven-3", true),
-        new MavenDownloadSourceConfiguration("tuna-apache", "Tsinghua TUNA Apache Mirror", "https://mirrors.tuna.tsinghua.edu.cn/apache/maven/maven-3", true),
-        new MavenDownloadSourceConfiguration("ustc-apache", "USTC Apache Mirror", "https://mirrors.ustc.edu.cn/apache/maven/maven-3", true)
+        new MavenDownloadSourceConfiguration("tuna-apache", "Tsinghua TUNA Apache Mirror", "https://mirrors.tuna.tsinghua.edu.cn/apache/maven/maven-3", true)
     ];
+
+    public string ResolveSettingsFilePath(MavenConfigurationScope scope, string? mavenHome = null) =>
+        scope == MavenConfigurationScope.User
+            ? ManagerSettings.GetDefaultMavenSettingsFilePath()
+            : BuildGlobalConfigPath(mavenHome, "settings.xml");
+
+    public string ResolveToolchainsFilePath(MavenConfigurationScope scope, string? mavenHome = null) =>
+        scope == MavenConfigurationScope.User
+            ? ManagerSettings.GetDefaultMavenToolchainsFilePath()
+            : BuildGlobalConfigPath(mavenHome, "toolchains.xml");
 
     public IReadOnlyList<MavenDownloadSourceConfiguration> BuildAvailableDownloadSources(
         IReadOnlyList<MavenDownloadSourceConfiguration>? customSources)
@@ -95,6 +104,39 @@ public sealed class MavenConfigurationService
             mirrors);
     }
 
+    public IReadOnlyList<MavenMirrorConfiguration> ImportMirrorsFromXmlFile(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            throw new InvalidOperationException("Mirror XML file path cannot be empty.");
+        }
+
+        var normalizedPath = Path.GetFullPath(filePath.Trim());
+        if (!File.Exists(normalizedPath))
+        {
+            throw new FileNotFoundException("Mirror XML file was not found.", normalizedPath);
+        }
+
+        var document = XDocument.Load(normalizedPath, LoadOptions.PreserveWhitespace);
+        var root = document.Root ?? throw new InvalidOperationException("The mirror XML root element is invalid.");
+        var elementNamespace = GetElementNamespace(root);
+
+        IEnumerable<XElement> mirrorElements = root.Name.LocalName switch
+        {
+            "settings" => root.Elements(elementNamespace + "mirrors").Elements(elementNamespace + "mirror"),
+            "mirrors" => root.Elements(elementNamespace + "mirror"),
+            "mirror" => [root],
+            _ => throw new InvalidOperationException("The selected XML file does not contain a supported Maven mirror structure.")
+        };
+
+        return mirrorElements
+            .Select(element => ReadMirror(element, elementNamespace))
+            .Where(mirror => mirror is not null)
+            .Cast<MavenMirrorConfiguration>()
+            .OrderBy(mirror => mirror.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
     public MavenSettingsApplyResult ApplySettings(
         string settingsFilePath,
         string localRepositoryPath,
@@ -154,6 +196,30 @@ public sealed class MavenConfigurationService
             BackupFilePath: backupFilePath);
     }
 
+    public void EnsureEditableSettingsFile(string settingsFilePath)
+    {
+        var normalizedPath = Path.GetFullPath(settingsFilePath.Trim());
+        if (File.Exists(normalizedPath))
+        {
+            return;
+        }
+
+        Directory.CreateDirectory(Path.GetDirectoryName(normalizedPath)!);
+        LoadOrCreateSettingsDocument(normalizedPath).Save(normalizedPath);
+    }
+
+    public void EnsureEditableToolchainsFile(string toolchainsFilePath)
+    {
+        var normalizedPath = Path.GetFullPath(toolchainsFilePath.Trim());
+        if (File.Exists(normalizedPath))
+        {
+            return;
+        }
+
+        Directory.CreateDirectory(Path.GetDirectoryName(normalizedPath)!);
+        CreateToolchainsDocument().Save(normalizedPath);
+    }
+
     private static MavenMirrorConfiguration? ReadMirror(XElement element, XNamespace elementNamespace)
     {
         var id = element.Element(elementNamespace + "id")?.Value?.Trim();
@@ -190,6 +256,16 @@ public sealed class MavenConfigurationService
                     XmlSchemaNamespace + "schemaLocation",
                     "http://maven.apache.org/SETTINGS/1.2.0 https://maven.apache.org/xsd/settings-1.2.0.xsd")));
     }
+
+    private static XDocument CreateToolchainsDocument() =>
+        new(
+            new XDeclaration("1.0", "utf-8", "yes"),
+            new XElement(
+                ToolchainsNamespace + "toolchains",
+                new XAttribute(XNamespace.Xmlns + "xsi", XmlSchemaNamespace),
+                new XAttribute(
+                    XmlSchemaNamespace + "schemaLocation",
+                    "http://maven.apache.org/TOOLCHAINS/1.1.0 https://maven.apache.org/xsd/toolchains-1.1.0.xsd")));
 
     private static void ReplaceSingleElement(XElement root, string localName, string value, XNamespace elementNamespace)
     {
@@ -278,6 +354,20 @@ public sealed class MavenConfigurationService
 
     private static string NormalizeUrl(string url) =>
         url.Trim().TrimEnd('/');
+
+    private static string BuildGlobalConfigPath(string? mavenHome, string fileName)
+    {
+        var candidateHome = string.IsNullOrWhiteSpace(mavenHome)
+            ? Environment.GetEnvironmentVariable("MAVEN_HOME")
+            : mavenHome;
+
+        if (string.IsNullOrWhiteSpace(candidateHome))
+        {
+            throw new InvalidOperationException("A Maven installation must be selected before using global Maven configuration files.");
+        }
+
+        return Path.Combine(candidateHome, "conf", fileName);
+    }
 
     private static XNamespace GetElementNamespace(XElement root) =>
         root.Name.Namespace == XNamespace.None

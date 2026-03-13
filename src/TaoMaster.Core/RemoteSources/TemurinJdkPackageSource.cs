@@ -92,7 +92,8 @@ public sealed class TemurinJdkPackageSource
             Checksum: package.Checksum,
             ChecksumAlgorithm: "SHA256",
             SuggestedInstallDirectoryName: $"temurin-{semver}-{architecture}",
-            Architecture: architecture);
+            Architecture: architecture,
+            OfficialDownloadUrl: package.Link);
     }
 
     public async Task<RemotePackageDescriptor> ResolveAsync(

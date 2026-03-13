@@ -38,11 +38,65 @@ public sealed class ApacheMavenPackageSource
             .ToList();
     }
 
+    public async Task<IReadOnlyList<RemotePackageDescriptor>> GetAvailablePackagesAsync(
+        string? preferredSourceId,
+        IReadOnlyList<MavenDownloadSourceConfiguration>? customSources,
+        CancellationToken cancellationToken)
+    {
+        var versions = await GetCurrentVersionsAsync(cancellationToken);
+        var tasks = versions.Select(version => TryResolveAsync(
+            version,
+            cancellationToken,
+            preferredSourceId,
+            customSources,
+            allowFallback: false));
+        var packages = await Task.WhenAll(tasks);
+
+        return versions.Zip(packages, (version, package) =>
+            package ?? new RemotePackageDescriptor(
+                Kind: ToolchainKind.Maven,
+                Provider: "apache",
+                DisplayName: $"Apache Maven {version}",
+                Version: version,
+                DownloadUrl: string.Empty,
+                FileName: $"apache-maven-{version}-bin.zip",
+                Checksum: string.Empty,
+                ChecksumAlgorithm: "SHA512",
+                SuggestedInstallDirectoryName: $"apache-maven-{version}",
+                Architecture: "noarch",
+                OfficialDownloadUrl: string.Empty,
+                DownloadSourceId: preferredSourceId,
+                DownloadSourceName: ResolvePreferredSource(BuildAvailableDownloadSources(customSources), preferredSourceId).Name,
+                IsDownloadAvailable: false,
+                AvailabilityMessage: "The selected Maven download source is currently unavailable for this version."))
+            .ToList();
+    }
+
     public async Task<RemotePackageDescriptor> ResolveAsync(
         string? version,
         CancellationToken cancellationToken,
         string? preferredSourceId = null,
-        IReadOnlyList<MavenDownloadSourceConfiguration>? customSources = null)
+        IReadOnlyList<MavenDownloadSourceConfiguration>? customSources = null,
+        bool allowFallback = true)
+    {
+        var package = await TryResolveAsync(version, cancellationToken, preferredSourceId, customSources, allowFallback);
+        if (package is not null)
+        {
+            return package;
+        }
+
+        var resolvedVersion = string.IsNullOrWhiteSpace(version) || version.Equals("latest", StringComparison.OrdinalIgnoreCase)
+            ? (await GetCurrentVersionsAsync(cancellationToken)).FirstOrDefault()
+            : version.Trim();
+        throw new InvalidOperationException($"Could not find an Apache Maven {resolvedVersion} ZIP package from the configured download sources.");
+    }
+
+    public async Task<RemotePackageDescriptor?> TryResolveAsync(
+        string? version,
+        CancellationToken cancellationToken,
+        string? preferredSourceId = null,
+        IReadOnlyList<MavenDownloadSourceConfiguration>? customSources = null,
+        bool allowFallback = true)
     {
         var resolvedVersion = string.IsNullOrWhiteSpace(version) || version.Equals("latest", StringComparison.OrdinalIgnoreCase)
             ? (await GetCurrentVersionsAsync(cancellationToken)).FirstOrDefault()
@@ -57,7 +111,11 @@ public sealed class ApacheMavenPackageSource
         var preferredSource = ResolvePreferredSource(sources, preferredSourceId);
         var fileName = $"apache-maven-{resolvedVersion}-bin.zip";
 
-        foreach (var source in BuildSourceOrder(sources, preferredSource))
+        var sourceOrder = allowFallback
+            ? BuildSourceOrder(sources, preferredSource)
+            : [preferredSource];
+
+        foreach (var source in sourceOrder)
         {
             var descriptor = await TryResolveFromSourceAsync(source, resolvedVersion, fileName, cancellationToken);
             if (descriptor is not null)
@@ -66,7 +124,7 @@ public sealed class ApacheMavenPackageSource
             }
         }
 
-        throw new InvalidOperationException($"Could not find an Apache Maven {resolvedVersion} ZIP package from the configured download sources.");
+        return null;
     }
 
     private async Task<RemotePackageDescriptor?> TryResolveFromSourceAsync(
@@ -87,7 +145,7 @@ public sealed class ApacheMavenPackageSource
 
         return new RemotePackageDescriptor(
             Kind: ToolchainKind.Maven,
-            Provider: source.Id,
+            Provider: "apache",
             DisplayName: $"Apache Maven {version}",
             Version: version,
             DownloadUrl: downloadUrl,
@@ -95,7 +153,12 @@ public sealed class ApacheMavenPackageSource
             Checksum: checksum,
             ChecksumAlgorithm: "SHA512",
             SuggestedInstallDirectoryName: $"apache-maven-{version}",
-            Architecture: "noarch");
+            Architecture: "noarch",
+            OfficialDownloadUrl: downloadUrl,
+            DownloadSourceId: source.Id,
+            DownloadSourceName: source.Name,
+            IsDownloadAvailable: true,
+            AvailabilityMessage: null);
     }
 
     private static IReadOnlyList<MavenDownloadSourceConfiguration> BuildSourceOrder(

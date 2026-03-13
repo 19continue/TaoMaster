@@ -10,4 +10,9 @@ public sealed record RemotePackageDescriptor(
     string Checksum,
     string ChecksumAlgorithm,
     string SuggestedInstallDirectoryName,
-    string? Architecture = null);
+    string? Architecture = null,
+    string? OfficialDownloadUrl = null,
+    string? DownloadSourceId = null,
+    string? DownloadSourceName = null,
+    bool IsDownloadAvailable = true,
+    string? AvailabilityMessage = null);

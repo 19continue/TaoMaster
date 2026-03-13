@@ -11,9 +11,13 @@ public sealed record ManagerSettings(
     string PathMode,
     string PreferredJdkProvider,
     string PreferredMavenProvider,
+    MavenConfigurationScope MavenConfigurationScope,
     string MavenSettingsFilePath,
+    string MavenToolchainsFilePath,
     string MavenLocalRepositoryPath,
     IReadOnlyList<MavenMirrorConfiguration> MavenMirrors,
+    IReadOnlyList<JdkDownloadSourceConfiguration> CustomJdkDownloadSources,
+    string PreferredJdkDownloadSourceId,
     IReadOnlyList<MavenDownloadSourceConfiguration> CustomMavenDownloadSources,
     string PreferredMavenDownloadSourceId,
     string PreferredUiLanguage = "SimplifiedChinese")
@@ -28,9 +32,13 @@ public sealed record ManagerSettings(
             PathMode: "managed-shell-sync",
             PreferredJdkProvider: "temurin",
             PreferredMavenProvider: "apache",
+            MavenConfigurationScope: MavenConfigurationScope.User,
             MavenSettingsFilePath: GetDefaultMavenSettingsFilePath(),
+            MavenToolchainsFilePath: GetDefaultMavenToolchainsFilePath(),
             MavenLocalRepositoryPath: GetDefaultMavenLocalRepositoryPath(),
             MavenMirrors: Array.Empty<MavenMirrorConfiguration>(),
+            CustomJdkDownloadSources: Array.Empty<JdkDownloadSourceConfiguration>(),
+            PreferredJdkDownloadSourceId: "jdk-official",
             CustomMavenDownloadSources: Array.Empty<MavenDownloadSourceConfiguration>(),
             PreferredMavenDownloadSourceId: "apache-official",
             PreferredUiLanguage: "SimplifiedChinese");
@@ -40,6 +48,12 @@ public sealed record ManagerSettings(
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
             ".m2",
             "settings.xml");
+
+    public static string GetDefaultMavenToolchainsFilePath() =>
+        Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            ".m2",
+            "toolchains.xml");
 
     public static string GetDefaultMavenLocalRepositoryPath() =>
         Path.Combine(

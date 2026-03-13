@@ -50,7 +50,8 @@ public sealed class OracleJdkPackageSource
                     Checksum: checksum,
                     ChecksumAlgorithm: "SHA256",
                     SuggestedInstallDirectoryName: $"oracle-{version}-{feature}-x64",
-                    Architecture: "x64"));
+                    Architecture: "x64",
+                    OfficialDownloadUrl: downloadUrl));
         }
 
         return packages

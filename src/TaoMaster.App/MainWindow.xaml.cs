@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.Versioning;
 using System.Windows;
@@ -36,6 +37,8 @@ internal enum AppSection
     Settings
 }
 
+internal sealed record ConfigurationScopeOption(MavenConfigurationScope Scope, string DisplayName);
+
 [SupportedOSPlatform("windows")]
 public partial class MainWindow : Window
 {
@@ -56,6 +59,7 @@ public partial class MainWindow : Window
     private readonly ApacheMavenPackageSource _mavenSource;
     private readonly PackageInstallationService _packageInstallationService;
     private readonly MavenConfigurationService _mavenConfigurationService;
+    private readonly JdkDownloadSourceService _jdkDownloadSourceService;
     private readonly ManagedInstallLayoutService _managedInstallLayoutService;
 
     private ManagerState _state;
@@ -64,9 +68,11 @@ public partial class MainWindow : Window
     private AppLocalizer _localizer;
     private readonly ObservableCollection<string> _activityEntries = [];
     private readonly ObservableCollection<MavenMirrorConfiguration> _configuredMavenMirrors = [];
+    private readonly ObservableCollection<JdkDownloadSourceConfiguration> _availableJdkDownloadSources = [];
     private readonly ObservableCollection<MavenDownloadSourceConfiguration> _availableMavenDownloadSources = [];
     private bool _hasLoaded;
     private bool _suppressLanguageSelectionChanged;
+    private bool _suppressConfigurationScopeSelectionChanged;
     private bool _suppressDownloadSourceSelectionChanged;
     private AppSection _currentSection = AppSection.Dashboard;
 
@@ -89,6 +95,7 @@ public partial class MainWindow : Window
         _oracleSource = new OracleJdkPackageSource(_httpClient);
         _mavenSource = new ApacheMavenPackageSource(_httpClient);
         _mavenConfigurationService = new MavenConfigurationService();
+        _jdkDownloadSourceService = new JdkDownloadSourceService();
         _managedInstallLayoutService = new ManagedInstallLayoutService();
 
         var downloadService = new PackageDownloadService(_httpClient);
@@ -103,7 +110,11 @@ public partial class MainWindow : Window
         ActivityListBox.ItemsSource = _activityEntries;
         ConfiguredMavenMirrorsListBox.ItemsSource = _configuredMavenMirrors;
         BuiltInMavenMirrorComboBox.ItemsSource = _mavenConfigurationService.GetBuiltInMirrors();
-        MavenDownloadSourceComboBox.ItemsSource = _availableMavenDownloadSources;
+        RemoteJdkDownloadSourceComboBox.ItemsSource = _availableJdkDownloadSources;
+        SettingsJdkDownloadSourceComboBox.ItemsSource = _availableJdkDownloadSources;
+        RemoteMavenDownloadSourceComboBox.ItemsSource = _availableMavenDownloadSources;
+        SettingsMavenDownloadSourceComboBox.ItemsSource = _availableMavenDownloadSources;
+        MavenConfigurationScopeComboBox.ItemsSource = BuildConfigurationScopeOptions();
         InitializeLanguageSelector();
         ApplyCurrentSection();
         ApplyLocalization();
@@ -206,35 +217,77 @@ public partial class MainWindow : Window
             "Save and Migrate Install Directories",
             "保存并迁移安装目录");
         LoadMavenSettingsButton.Content = Localize(
-            "Load Current Maven Settings",
-            "读取当前 Maven 配置");
+            "Load Mirrors From Config File",
+            "读取配置文件镜像");
+        ImportMirrorXmlButton.Content = Localize(
+            "Import Mirror XML",
+            "导入镜像 XML");
         MavenRepositoryMigrationCheckBox.Content = Localize(
             "Move existing local repository contents when the repository directory changes.",
             "当本地仓库目录变更时，一并迁移已有仓库内容。");
         UpdateSelectedMirrorButton.Content = Localize(
             "Update Selected Mirror",
             "更新选中镜像");
-        ClearMirrorEditorButton.Content = Localize(
-            "Clear Mirror Editor",
-            "清空镜像编辑器");
         SaveMavenSettingsButton.Content = Localize(
             "Save Maven Configuration",
             "保存 Maven 配置");
-        MavenDownloadSourceTitleTextBlock.Text = Localize(
+        UpdateSelectedJdkDownloadSourceButton.Content = Localize(
+            "Update Selected JDK Source",
+            "更新选中的 JDK 下载源");
+        AddCustomJdkDownloadSourceButton.Content = Localize(
+            "Add Custom JDK Source",
+            "添加自定义 JDK 下载源");
+        RemoveSelectedJdkDownloadSourceButton.Content = Localize(
+            "Remove Selected JDK Override",
+            "移除选中的 JDK 覆盖源");
+        UpdateSelectedMavenDownloadSourceButton.Content = Localize(
+            "Update Selected Maven Source",
+            "更新选中的 Maven 下载源");
+        AddCustomMavenDownloadSourceButton.Content = Localize(
+            "Add Custom Maven Source",
+            "添加自定义 Maven 下载源");
+        RemoveSelectedMavenDownloadSourceButton.Content = Localize(
+            "Remove Selected Maven Override",
+            "移除选中的 Maven 覆盖源");
+        OpenMavenSettingsFileButton.Content = Localize(
+            "Open",
+            "打开");
+        OpenMavenToolchainsFileButton.Content = Localize(
+            "Open",
+            "打开");
+        RemoteJdkAvailabilityHintTextBlock.Text = Localize(
+            "Only versions that can be downloaded by the selected source should be used.",
+            "请优先选择当前下载源可直接下载的 JDK 版本。");
+        RemoteMavenAvailabilityHintTextBlock.Text = Localize(
+            "Unavailable versions stay visible so you can tell which mirror is missing which package.",
+            "列表会保留不可下载版本，方便判断当前镜像缺哪些包。");
+        DownloadSourcesTitleTextBlock.Text = Localize(
+            "Download Sources",
+            "下载源");
+        DownloadSourcesDescriptionTextBlock.Text = Localize(
+            "Manage the active JDK and Maven download mirrors here. Changes are reflected immediately in the remote install page.",
+            "在这里管理 JDK 和 Maven 的下载镜像源。切换后会立即刷新远程安装页的可下载状态。");
+        RemoteJdkDownloadSourceLabelTextBlock.Text = Localize(
+            "JDK Download Source",
+            "JDK 下载源");
+        RemoteMavenDownloadSourceLabelTextBlock.Text = Localize(
             "Maven Download Source",
             "Maven 下载源");
-        MavenDownloadSourceDescriptionTextBlock.Text = Localize(
-            "Version lists stay synced from Apache official metadata. Binary downloads can use the selected source below.",
-            "版本列表始终从 Apache 官方元数据获取，下面只决定实际下载包使用哪个来源。");
-        CustomDownloadSourceTitleTextBlock.Text = Localize(
-            "Custom Download Source",
-            "自定义下载源");
-        AddCustomDownloadSourceButton.Content = Localize(
-            "Add Custom Source",
-            "添加自定义下载源");
-        RemoveSelectedDownloadSourceButton.Content = Localize(
-            "Remove Selected Custom Source",
-            "移除选中自定义下载源");
+        SettingsJdkDownloadSourceLabelTextBlock.Text = Localize(
+            "JDK Download Source",
+            "JDK 下载源");
+        JdkDownloadSourceProvidersLabelTextBlock.Text = Localize(
+            "Supported Providers",
+            "支持的发行方");
+        SettingsMavenDownloadSourceLabelTextBlock.Text = Localize(
+            "Maven Download Source",
+            "Maven 下载源");
+        SettingsConfigurationScopeLabelTextBlock.Text = Localize(
+            "Configuration Scope",
+            "配置作用域");
+        SettingsToolchainsFilePathLabelTextBlock.Text = Localize(
+            "toolchains.xml Path",
+            "toolchains.xml 路径");
     }
 
     private string Localize(string english, string chinese) =>
@@ -271,6 +324,12 @@ public partial class MainWindow : Window
     [
         new LanguageOption(AppLanguage.English, "English"),
         new LanguageOption(AppLanguage.SimplifiedChinese, "简体中文")
+    ];
+
+    private IReadOnlyList<ConfigurationScopeOption> BuildConfigurationScopeOptions() =>
+    [
+        new ConfigurationScopeOption(MavenConfigurationScope.User, Localize("User Configuration", "用户级配置")),
+        new ConfigurationScopeOption(MavenConfigurationScope.Global, Localize("Global Configuration", "全局配置"))
     ];
 
     private void PersistLanguagePreference(AppLanguage language)
@@ -350,9 +409,12 @@ public partial class MainWindow : Window
         AppVersionTextBlock.Text = ProductInfo.Version;
         ShellSyncStatusTextBlock.Text = BuildShellSyncStatusText();
         ShellSyncDetailTextBlock.Text = BuildShellSyncDetailText();
+        RefreshConfigurationScopeSelector();
         MavenSettingsFilePathTextBox.Text = _state.Settings.MavenSettingsFilePath;
+        MavenToolchainsFilePathTextBox.Text = _state.Settings.MavenToolchainsFilePath;
         MavenLocalRepositoryPathTextBox.Text = _state.Settings.MavenLocalRepositoryPath;
         RefreshConfiguredMavenMirrors();
+        RefreshJdkDownloadSources();
         RefreshMavenDownloadSources();
 
         var selection = _selectionResolver.Resolve(_state);
@@ -391,6 +453,15 @@ public partial class MainWindow : Window
         }
     }
 
+    private void RefreshConfigurationScopeSelector()
+    {
+        _suppressConfigurationScopeSelectionChanged = true;
+        var options = BuildConfigurationScopeOptions();
+        MavenConfigurationScopeComboBox.ItemsSource = options;
+        MavenConfigurationScopeComboBox.SelectedItem = options.First(option => option.Scope == _state.Settings.MavenConfigurationScope);
+        _suppressConfigurationScopeSelectionChanged = false;
+    }
+
     private void RefreshConfiguredMavenMirrors()
     {
         _configuredMavenMirrors.Clear();
@@ -423,9 +494,64 @@ public partial class MainWindow : Window
         var selected = _availableMavenDownloadSources.FirstOrDefault(source =>
                            source.Id.Equals(_state.Settings.PreferredMavenDownloadSourceId, StringComparison.OrdinalIgnoreCase))
                        ?? _availableMavenDownloadSources.FirstOrDefault();
-        MavenDownloadSourceComboBox.SelectedItem = selected;
-        MavenDownloadSourceBaseUrlTextBlock.Text = selected?.BaseUrl ?? _localizer["nonePlaceholder"];
+        RemoteMavenDownloadSourceComboBox.SelectedItem = selected;
+        SettingsMavenDownloadSourceComboBox.SelectedItem = selected;
+        MavenDownloadSourceNameTextBox.Text = selected?.Name ?? string.Empty;
+        MavenDownloadSourceUrlTextBox.Text = selected?.BaseUrl ?? string.Empty;
         _suppressDownloadSourceSelectionChanged = false;
+    }
+
+    private void RefreshJdkDownloadSources()
+    {
+        _suppressDownloadSourceSelectionChanged = true;
+        _availableJdkDownloadSources.Clear();
+
+        foreach (var source in _jdkDownloadSourceService.BuildAvailableSources(_state.Settings.CustomJdkDownloadSources))
+        {
+            _availableJdkDownloadSources.Add(source);
+        }
+
+        var selected = _availableJdkDownloadSources.FirstOrDefault(source =>
+                           source.Id.Equals(_state.Settings.PreferredJdkDownloadSourceId, StringComparison.OrdinalIgnoreCase))
+                       ?? _availableJdkDownloadSources.FirstOrDefault();
+        RemoteJdkDownloadSourceComboBox.SelectedItem = selected;
+        SettingsJdkDownloadSourceComboBox.SelectedItem = selected;
+        JdkDownloadSourceNameTextBox.Text = selected?.Name ?? string.Empty;
+        JdkDownloadSourceUrlPrefixTextBox.Text = selected?.UrlPrefix ?? string.Empty;
+        JdkDownloadSourceProvidersTextBox.Text = selected?.SupportedProviders ?? "*";
+        _suppressDownloadSourceSelectionChanged = false;
+    }
+
+    private ManagedInstallation? ResolveMavenInstallationForConfiguration()
+    {
+        var selection = _selectionResolver.Resolve(_state);
+        return selection.Maven
+               ?? MavenListBox.SelectedItem as ManagedInstallation
+               ?? DashboardMavenComboBox.SelectedItem as ManagedInstallation
+               ?? _state.Mavens.FirstOrDefault();
+    }
+
+    private bool TryResolveMavenConfigurationPaths(
+        MavenConfigurationScope scope,
+        out string settingsFilePath,
+        out string toolchainsFilePath)
+    {
+        try
+        {
+            var mavenHome = scope == MavenConfigurationScope.Global
+                ? ResolveMavenInstallationForConfiguration()?.HomeDirectory
+                : null;
+
+            settingsFilePath = _mavenConfigurationService.ResolveSettingsFilePath(scope, mavenHome);
+            toolchainsFilePath = _mavenConfigurationService.ResolveToolchainsFilePath(scope, mavenHome);
+            return true;
+        }
+        catch (InvalidOperationException)
+        {
+            settingsFilePath = string.Empty;
+            toolchainsFilePath = string.Empty;
+            return false;
+        }
     }
 
     private void PopulateMavenMirrorEditor(MavenMirrorConfiguration? mirror)
@@ -816,36 +942,88 @@ public partial class MainWindow : Window
     private async Task RefreshRemoteVersionsCoreAsync()
     {
         var currentJdkPackage = RemoteJdkVersionComboBox.SelectedItem as RemotePackageDescriptor;
-        var currentMavenVersion = RemoteMavenVersionComboBox.SelectedItem as string;
+        var currentMavenPackage = RemoteMavenVersionComboBox.SelectedItem as RemotePackageDescriptor;
+        var selectedJdkSource = (RemoteJdkDownloadSourceComboBox.SelectedItem as JdkDownloadSourceConfiguration)
+                                ?? _availableJdkDownloadSources.FirstOrDefault()
+                                ?? _jdkDownloadSourceService.GetBuiltInSources().First();
 
         var temurinTask = _temurinSource.GetLatestPackagesByFeatureAsync("x64", CancellationToken.None);
         var oracleTask = _oracleSource.GetAvailablePackagesAsync(CancellationToken.None);
-        var mavenTask = _mavenSource.GetCurrentVersionsAsync(CancellationToken.None);
+        var mavenTask = _mavenSource.GetAvailablePackagesAsync(
+            _state.Settings.PreferredMavenDownloadSourceId,
+            _state.Settings.CustomMavenDownloadSources,
+            CancellationToken.None);
 
         await Task.WhenAll(temurinTask, oracleTask, mavenTask);
 
-        var jdkVersions = (await temurinTask)
+        var rawJdkVersions = (await temurinTask)
             .Concat(await oracleTask)
             .OrderByDescending(package => ParseRemoteJdkSortKey(package.Version))
             .ThenBy(package => package.Provider, StringComparer.OrdinalIgnoreCase)
             .ToList();
-        var mavenVersions = (await mavenTask).ToList();
+        var jdkVersions = await BuildRemoteJdkOptionsAsyncV2(rawJdkVersions, selectedJdkSource);
+        var mavenVersions = (await mavenTask)
+            .Select(WithAvailabilityMessage)
+            .OrderByDescending(package => package.IsDownloadAvailable)
+            .ThenByDescending(package => package.Version, TaoMaster.Core.Utilities.VersionStringComparer.Instance)
+            .ToList();
 
         RemoteJdkVersionComboBox.ItemsSource = jdkVersions;
         RemoteJdkVersionComboBox.SelectedItem = currentJdkPackage is not null
                                                  && jdkVersions.Any(package =>
                                                      package.Version.Equals(currentJdkPackage.Version, StringComparison.OrdinalIgnoreCase)
-                                                     && package.Provider.Equals(currentJdkPackage.Provider, StringComparison.OrdinalIgnoreCase))
+                                                     && package.Provider.Equals(currentJdkPackage.Provider, StringComparison.OrdinalIgnoreCase)
+                                                     && string.Equals(package.DownloadSourceId, currentJdkPackage.DownloadSourceId, StringComparison.OrdinalIgnoreCase))
             ? jdkVersions.First(package =>
                 package.Version.Equals(currentJdkPackage.Version, StringComparison.OrdinalIgnoreCase)
-                && package.Provider.Equals(currentJdkPackage.Provider, StringComparison.OrdinalIgnoreCase))
+                && package.Provider.Equals(currentJdkPackage.Provider, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(package.DownloadSourceId, currentJdkPackage.DownloadSourceId, StringComparison.OrdinalIgnoreCase))
             : jdkVersions.FirstOrDefault();
 
         RemoteMavenVersionComboBox.ItemsSource = mavenVersions;
-        RemoteMavenVersionComboBox.SelectedItem = !string.IsNullOrWhiteSpace(currentMavenVersion)
-                                                 && mavenVersions.Contains(currentMavenVersion, StringComparer.OrdinalIgnoreCase)
-            ? mavenVersions.First(version => version.Equals(currentMavenVersion, StringComparison.OrdinalIgnoreCase))
+        RemoteMavenVersionComboBox.SelectedItem = currentMavenPackage is not null
+                                                 && mavenVersions.Any(package =>
+                                                     package.Version.Equals(currentMavenPackage.Version, StringComparison.OrdinalIgnoreCase)
+                                                     && string.Equals(package.DownloadSourceId, currentMavenPackage.DownloadSourceId, StringComparison.OrdinalIgnoreCase))
+            ? mavenVersions.First(package =>
+                package.Version.Equals(currentMavenPackage.Version, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(package.DownloadSourceId, currentMavenPackage.DownloadSourceId, StringComparison.OrdinalIgnoreCase))
             : mavenVersions.FirstOrDefault();
+
+        UpdateRemoteAvailabilityHints(jdkVersions, mavenVersions);
+    }
+
+    private async Task<IReadOnlyList<RemotePackageDescriptor>> BuildRemoteJdkOptionsAsync(
+        IReadOnlyList<RemotePackageDescriptor> packages,
+        JdkDownloadSourceConfiguration source)
+    {
+        var tasks = packages.Select(async package =>
+        {
+            var transformed = _jdkDownloadSourceService.ApplySource(package, source);
+            if (!transformed.IsDownloadAvailable)
+            {
+                return transformed with
+                {
+                    AvailabilityMessage = Localize("Unsupported by source", "当前下载源不支持")
+                };
+            }
+
+            var exists = await UrlExistsAsync(transformed.DownloadUrl, CancellationToken.None);
+            return transformed with
+            {
+                IsDownloadAvailable = exists,
+                AvailabilityMessage = exists
+                    ? Localize("Ready", "可下载")
+                    : Localize("Unavailable", "当前源不可下载")
+            };
+        });
+
+        var resolved = await Task.WhenAll(tasks);
+        return resolved
+            .OrderByDescending(package => package.IsDownloadAvailable)
+            .ThenByDescending(package => ParseRemoteJdkSortKey(package.Version))
+            .ThenBy(package => package.Provider, StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 
     private static int ParseRemoteJdkSortKey(string version)
@@ -855,6 +1033,150 @@ public partial class MainWindow : Window
             : version.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault() ?? version;
 
         return int.TryParse(featureText, out var featureVersion) ? featureVersion : 0;
+    }
+
+    private async Task<IReadOnlyList<RemotePackageDescriptor>> BuildRemoteJdkOptionsAsyncV2(
+        IReadOnlyList<RemotePackageDescriptor> packages,
+        JdkDownloadSourceConfiguration source)
+    {
+        var tasks = packages.Select(async package =>
+        {
+            var transformed = _jdkDownloadSourceService.ApplySource(package, source);
+            if (!transformed.IsDownloadAvailable)
+            {
+                return WithAvailabilityMessage(transformed);
+            }
+
+            var exists = await UrlExistsAsync(transformed.DownloadUrl, CancellationToken.None);
+            return WithAvailabilityMessage(transformed with
+            {
+                IsDownloadAvailable = exists
+            });
+        });
+
+        var resolved = await Task.WhenAll(tasks);
+        return resolved
+            .OrderByDescending(package => package.IsDownloadAvailable)
+            .ThenByDescending(package => ParseRemoteJdkSortKey(package.Version))
+            .ThenBy(package => package.Provider, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private RemotePackageDescriptor WithAvailabilityMessage(RemotePackageDescriptor package)
+    {
+        var sourceName = package.DownloadSourceName ?? package.Provider;
+        if (package.IsDownloadAvailable)
+        {
+            return package with
+            {
+                AvailabilityMessage = FormatLocalized(
+                    "Ready in {0}",
+                    "{0} 可下载",
+                    sourceName)
+            };
+        }
+
+        var unsupported = !string.IsNullOrWhiteSpace(package.AvailabilityMessage)
+                          && package.AvailabilityMessage.Contains("support", StringComparison.OrdinalIgnoreCase);
+        return package with
+        {
+            AvailabilityMessage = unsupported
+                ? FormatLocalized(
+                    "{0} does not support this vendor",
+                    "{0} 不支持当前发行方",
+                    sourceName)
+                : FormatLocalized(
+                    "Unavailable in {0}",
+                    "{0} 暂不可下载",
+                    sourceName)
+        };
+    }
+
+    private void UpdateRemoteAvailabilityHints(
+        IReadOnlyList<RemotePackageDescriptor> jdkVersions,
+        IReadOnlyList<RemotePackageDescriptor> mavenVersions)
+    {
+        RemoteJdkAvailabilityHintTextBlock.Text = BuildAvailabilitySummary(
+            jdkVersions,
+            (RemoteJdkDownloadSourceComboBox.SelectedItem as JdkDownloadSourceConfiguration)?.Name
+            ?? _state.Settings.PreferredJdkDownloadSourceId,
+            "JDK");
+        RemoteMavenAvailabilityHintTextBlock.Text = BuildAvailabilitySummary(
+            mavenVersions,
+            (RemoteMavenDownloadSourceComboBox.SelectedItem as MavenDownloadSourceConfiguration)?.Name
+            ?? _state.Settings.PreferredMavenDownloadSourceId,
+            "Maven");
+    }
+
+    private string BuildAvailabilitySummary(
+        IReadOnlyList<RemotePackageDescriptor> packages,
+        string sourceName,
+        string label)
+    {
+        if (packages.Count == 0)
+        {
+            return FormatLocalized(
+                "No remote {0} packages were loaded for {1}.",
+                "{1} 当前没有加载到远程 {0} 包。",
+                label,
+                sourceName);
+        }
+
+        var availableCount = packages.Count(package => package.IsDownloadAvailable);
+        return availableCount == packages.Count
+            ? FormatLocalized(
+                "{0} remote {1} packages are ready in {2}.",
+                "{2} 当前可下载 {0} 个远程 {1} 包。",
+                availableCount,
+                label,
+                sourceName)
+            : FormatLocalized(
+                "{0}/{1} remote {2} packages are ready in {3}.",
+                "{3} 当前可下载 {0}/{1} 个远程 {2} 包。",
+                availableCount,
+                packages.Count,
+                label,
+                sourceName);
+    }
+
+    private async Task<bool> UrlExistsAsync(string url, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            return false;
+        }
+
+        try
+        {
+            using var headRequest = new System.Net.Http.HttpRequestMessage(System.Net.Http.HttpMethod.Head, url);
+            using var headResponse = await _httpClient.SendAsync(
+                headRequest,
+                System.Net.Http.HttpCompletionOption.ResponseHeadersRead,
+                cancellationToken);
+
+            if (headResponse.IsSuccessStatusCode)
+            {
+                return true;
+            }
+        }
+        catch
+        {
+            // Some mirrors reject HEAD. Fall back to GET.
+        }
+
+        try
+        {
+            using var getRequest = new System.Net.Http.HttpRequestMessage(System.Net.Http.HttpMethod.Get, url);
+            using var getResponse = await _httpClient.SendAsync(
+                getRequest,
+                System.Net.Http.HttpCompletionOption.ResponseHeadersRead,
+                cancellationToken);
+            return getResponse.IsSuccessStatusCode;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private string BuildShellPreviewText(string shellKind)
@@ -1154,7 +1476,7 @@ public partial class MainWindow : Window
                     persistState: true,
                     settingsFilePathOverride: MavenSettingsFilePathTextBox.Text.Trim()));
                 RefreshStateBindings(GetSelectedInstallationId(JdkListBox), GetSelectedInstallationId(MavenListBox));
-                return Localize("Loaded current Maven settings.", "已读取当前 Maven 配置。");
+                return Localize("Loaded mirrors from the config file.", "已读取配置文件中的镜像。");
             });
     }
 
@@ -1278,6 +1600,519 @@ public partial class MainWindow : Window
     private async void OnSaveMavenSettingsClicked(object sender, RoutedEventArgs e)
     {
         await ApplyMavenSettingsAsync(MavenRepositoryMigrationCheckBox.IsChecked == true);
+    }
+
+    private async void OnRemoteJdkDownloadSourceSelectionChanged(object sender, WpfSelectionChangedEventArgs e)
+    {
+        if (_suppressDownloadSourceSelectionChanged || RemoteJdkDownloadSourceComboBox.SelectedItem is not JdkDownloadSourceConfiguration source)
+        {
+            return;
+        }
+
+        await PersistPreferredJdkDownloadSourceAsync(source);
+    }
+
+    private async void OnSettingsJdkDownloadSourceSelectionChanged(object sender, WpfSelectionChangedEventArgs e)
+    {
+        if (_suppressDownloadSourceSelectionChanged || SettingsJdkDownloadSourceComboBox.SelectedItem is not JdkDownloadSourceConfiguration source)
+        {
+            return;
+        }
+
+        await PersistPreferredJdkDownloadSourceAsync(source);
+    }
+
+    private async void OnRemoteMavenDownloadSourceSelectionChanged(object sender, WpfSelectionChangedEventArgs e)
+    {
+        if (_suppressDownloadSourceSelectionChanged || RemoteMavenDownloadSourceComboBox.SelectedItem is not MavenDownloadSourceConfiguration source)
+        {
+            return;
+        }
+
+        await PersistPreferredMavenDownloadSourceAsync(source);
+    }
+
+    private async void OnSettingsMavenDownloadSourceSelectionChanged(object sender, WpfSelectionChangedEventArgs e)
+    {
+        if (_suppressDownloadSourceSelectionChanged || SettingsMavenDownloadSourceComboBox.SelectedItem is not MavenDownloadSourceConfiguration source)
+        {
+            return;
+        }
+
+        await PersistPreferredMavenDownloadSourceAsync(source);
+    }
+
+    private async Task PersistPreferredJdkDownloadSourceAsync(JdkDownloadSourceConfiguration source)
+    {
+        _state = _state with
+        {
+            Settings = _state.Settings with
+            {
+                PreferredJdkDownloadSourceId = source.Id
+            }
+        };
+
+        _stateStore.Save(_layout, _state);
+        RefreshJdkDownloadSources();
+        await RefreshRemoteVersionsAfterSourceChangeAsync(
+            Localize("Refreshing JDK download availability...", "正在刷新 JDK 下载可用性..."),
+            FormatLocalized("JDK download source set to: {0}", "JDK 下载源已切换为：{0}", source.Name));
+    }
+
+    private async Task PersistPreferredMavenDownloadSourceAsync(MavenDownloadSourceConfiguration source)
+    {
+        _state = _state with
+        {
+            Settings = _state.Settings with
+            {
+                PreferredMavenDownloadSourceId = source.Id
+            }
+        };
+
+        _stateStore.Save(_layout, _state);
+        RefreshMavenDownloadSources();
+        await RefreshRemoteVersionsAfterSourceChangeAsync(
+            Localize("Refreshing Maven download availability...", "正在刷新 Maven 下载可用性..."),
+            FormatLocalized("Maven download source set to: {0}", "Maven 下载源已切换为：{0}", source.Name));
+    }
+
+    private async Task RefreshRemoteVersionsAfterSourceChangeAsync(string busyMessage, string statusMessage)
+    {
+        if (!_hasLoaded)
+        {
+            SetStatus(statusMessage);
+            return;
+        }
+
+        await ExecuteBusyWithMessageAsync(
+            busyMessage,
+            async () =>
+            {
+                await RefreshRemoteVersionsCoreAsync();
+                return statusMessage;
+            });
+    }
+
+    private async void OnUpdateSelectedJdkDownloadSourceClicked(object sender, RoutedEventArgs e)
+    {
+        if (SettingsJdkDownloadSourceComboBox.SelectedItem is not JdkDownloadSourceConfiguration selectedSource)
+        {
+            ShowValidationMessage(Localize(
+                "Select a JDK download source first.",
+                "请先选择一个 JDK 下载源。"));
+            return;
+        }
+
+        var updatedSource = BuildJdkDownloadSourceFromEditor(selectedSource.Id, selectedSource.IsBuiltIn);
+        if (updatedSource is null)
+        {
+            ShowValidationMessage(Localize(
+                "Enter a JDK source name first.",
+                "请先填写 JDK 下载源名称。"));
+            return;
+        }
+
+        var customSources = _state.Settings.CustomJdkDownloadSources
+            .Where(existing => !existing.Id.Equals(updatedSource.Id, StringComparison.OrdinalIgnoreCase))
+            .Concat([updatedSource])
+            .OrderBy(existing => existing.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        _state = _state with
+        {
+            Settings = _state.Settings with
+            {
+                CustomJdkDownloadSources = customSources,
+                PreferredJdkDownloadSourceId = updatedSource.Id
+            }
+        };
+
+        _stateStore.Save(_layout, _state);
+        RefreshJdkDownloadSources();
+        await RefreshRemoteVersionsAfterSourceChangeAsync(
+            Localize("Refreshing JDK download availability...", "正在刷新 JDK 下载可用性..."),
+            FormatLocalized("JDK download source updated: {0}", "JDK 下载源已更新：{0}", updatedSource.Name));
+    }
+
+    private async void OnAddCustomJdkDownloadSourceClicked(object sender, RoutedEventArgs e)
+    {
+        var source = BuildJdkDownloadSourceFromEditor(requireUrlPrefix: true);
+        if (source is null)
+        {
+            ShowValidationMessage(Localize(
+                "Enter a JDK source name and URL prefix first.",
+                "请先填写 JDK 下载源名称和 URL 前缀。"));
+            return;
+        }
+
+        var customSources = _state.Settings.CustomJdkDownloadSources
+            .Where(existing => !existing.Id.Equals(source.Id, StringComparison.OrdinalIgnoreCase))
+            .Concat([source])
+            .OrderBy(existing => existing.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        _state = _state with
+        {
+            Settings = _state.Settings with
+            {
+                CustomJdkDownloadSources = customSources,
+                PreferredJdkDownloadSourceId = source.Id
+            }
+        };
+
+        _stateStore.Save(_layout, _state);
+        RefreshJdkDownloadSources();
+        await RefreshRemoteVersionsAfterSourceChangeAsync(
+            Localize("Refreshing JDK download availability...", "正在刷新 JDK 下载可用性..."),
+            FormatLocalized("Custom JDK download source added: {0}", "已添加自定义 JDK 下载源：{0}", source.Name));
+    }
+
+    private async void OnRemoveSelectedJdkDownloadSourceClicked(object sender, RoutedEventArgs e)
+    {
+        if (SettingsJdkDownloadSourceComboBox.SelectedItem is not JdkDownloadSourceConfiguration selectedSource)
+        {
+            ShowValidationMessage(Localize(
+                "Select a JDK download source first.",
+                "请先选择一个 JDK 下载源。"));
+            return;
+        }
+
+        var customExists = _state.Settings.CustomJdkDownloadSources.Any(existing =>
+            existing.Id.Equals(selectedSource.Id, StringComparison.OrdinalIgnoreCase));
+        if (!customExists)
+        {
+            ShowValidationMessage(Localize(
+                "The selected JDK source is using the built-in definition. Nothing can be removed.",
+                "当前 JDK 下载源使用的是内置定义，没有可移除的覆盖。"));
+            return;
+        }
+
+        var remaining = _state.Settings.CustomJdkDownloadSources
+            .Where(existing => !existing.Id.Equals(selectedSource.Id, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        var preferredId = _jdkDownloadSourceService.BuildAvailableSources(remaining)
+            .Any(source => source.Id.Equals(selectedSource.Id, StringComparison.OrdinalIgnoreCase))
+            ? selectedSource.Id
+            : "jdk-official";
+
+        _state = _state with
+        {
+            Settings = _state.Settings with
+            {
+                CustomJdkDownloadSources = remaining,
+                PreferredJdkDownloadSourceId = preferredId
+            }
+        };
+
+        _stateStore.Save(_layout, _state);
+        RefreshJdkDownloadSources();
+        await RefreshRemoteVersionsAfterSourceChangeAsync(
+            Localize("Refreshing JDK download availability...", "正在刷新 JDK 下载可用性..."),
+            FormatLocalized("JDK download source restored: {0}", "JDK 下载源已恢复：{0}", selectedSource.Name));
+    }
+
+    private async void OnUpdateSelectedMavenDownloadSourceClicked(object sender, RoutedEventArgs e)
+    {
+        if (SettingsMavenDownloadSourceComboBox.SelectedItem is not MavenDownloadSourceConfiguration selectedSource)
+        {
+            ShowValidationMessage(Localize(
+                "Select a Maven download source first.",
+                "请先选择一个 Maven 下载源。"));
+            return;
+        }
+
+        var updatedSource = BuildMavenDownloadSourceFromEditor(selectedSource.Id, selectedSource.IsBuiltIn);
+        if (updatedSource is null)
+        {
+            ShowValidationMessage(Localize(
+                "Enter a Maven source name and base URL first.",
+                "请先填写 Maven 下载源名称和基础 URL。"));
+            return;
+        }
+
+        var customSources = _state.Settings.CustomMavenDownloadSources
+            .Where(existing => !existing.Id.Equals(updatedSource.Id, StringComparison.OrdinalIgnoreCase))
+            .Concat([updatedSource])
+            .OrderBy(existing => existing.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        _state = _state with
+        {
+            Settings = _state.Settings with
+            {
+                CustomMavenDownloadSources = customSources,
+                PreferredMavenDownloadSourceId = updatedSource.Id
+            }
+        };
+
+        _stateStore.Save(_layout, _state);
+        RefreshMavenDownloadSources();
+        await RefreshRemoteVersionsAfterSourceChangeAsync(
+            Localize("Refreshing Maven download availability...", "正在刷新 Maven 下载可用性..."),
+            FormatLocalized("Maven download source updated: {0}", "Maven 下载源已更新：{0}", updatedSource.Name));
+    }
+
+    private async void OnAddCustomMavenDownloadSourceClicked(object sender, RoutedEventArgs e)
+    {
+        var source = BuildMavenDownloadSourceFromEditor();
+        if (source is null)
+        {
+            ShowValidationMessage(Localize(
+                "Enter a Maven source name and base URL first.",
+                "请先填写 Maven 下载源名称和基础 URL。"));
+            return;
+        }
+
+        var customSources = _state.Settings.CustomMavenDownloadSources
+            .Where(existing => !existing.Id.Equals(source.Id, StringComparison.OrdinalIgnoreCase))
+            .Concat([source])
+            .OrderBy(existing => existing.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        _state = _state with
+        {
+            Settings = _state.Settings with
+            {
+                CustomMavenDownloadSources = customSources,
+                PreferredMavenDownloadSourceId = source.Id
+            }
+        };
+
+        _stateStore.Save(_layout, _state);
+        RefreshMavenDownloadSources();
+        await RefreshRemoteVersionsAfterSourceChangeAsync(
+            Localize("Refreshing Maven download availability...", "正在刷新 Maven 下载可用性..."),
+            FormatLocalized("Custom Maven download source added: {0}", "已添加自定义 Maven 下载源：{0}", source.Name));
+    }
+
+    private async void OnRemoveSelectedMavenDownloadSourceClicked(object sender, RoutedEventArgs e)
+    {
+        if (SettingsMavenDownloadSourceComboBox.SelectedItem is not MavenDownloadSourceConfiguration selectedSource)
+        {
+            ShowValidationMessage(Localize(
+                "Select a Maven download source first.",
+                "请先选择一个 Maven 下载源。"));
+            return;
+        }
+
+        var customExists = _state.Settings.CustomMavenDownloadSources.Any(existing =>
+            existing.Id.Equals(selectedSource.Id, StringComparison.OrdinalIgnoreCase));
+        if (!customExists)
+        {
+            ShowValidationMessage(Localize(
+                "The selected Maven source is using the built-in definition. Nothing can be removed.",
+                "当前 Maven 下载源使用的是内置定义，没有可移除的覆盖。"));
+            return;
+        }
+
+        var remaining = _state.Settings.CustomMavenDownloadSources
+            .Where(existing => !existing.Id.Equals(selectedSource.Id, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        var preferredId = _mavenSource.BuildAvailableDownloadSources(remaining)
+            .Any(source => source.Id.Equals(selectedSource.Id, StringComparison.OrdinalIgnoreCase))
+            ? selectedSource.Id
+            : "apache-official";
+
+        _state = _state with
+        {
+            Settings = _state.Settings with
+            {
+                CustomMavenDownloadSources = remaining,
+                PreferredMavenDownloadSourceId = preferredId
+            }
+        };
+
+        _stateStore.Save(_layout, _state);
+        RefreshMavenDownloadSources();
+        await RefreshRemoteVersionsAfterSourceChangeAsync(
+            Localize("Refreshing Maven download availability...", "正在刷新 Maven 下载可用性..."),
+            FormatLocalized("Maven download source restored: {0}", "Maven 下载源已恢复：{0}", selectedSource.Name));
+    }
+
+    private void OnMavenConfigurationScopeSelectionChanged(object sender, WpfSelectionChangedEventArgs e)
+    {
+        if (_suppressConfigurationScopeSelectionChanged || MavenConfigurationScopeComboBox.SelectedItem is not ConfigurationScopeOption option)
+        {
+            return;
+        }
+
+        if (!TryResolveMavenConfigurationPaths(option.Scope, out var settingsFilePath, out var toolchainsFilePath))
+        {
+            RefreshConfigurationScopeSelector();
+            ShowValidationMessage(Localize(
+                "Select a Maven installation before using global Maven configuration files.",
+                "切换到全局 Maven 配置前，请先选择一个 Maven 安装。"));
+            return;
+        }
+
+        _state = _state with
+        {
+            Settings = _state.Settings with
+            {
+                MavenConfigurationScope = option.Scope,
+                MavenSettingsFilePath = settingsFilePath,
+                MavenToolchainsFilePath = toolchainsFilePath
+            }
+        };
+
+        _stateStore.Save(_layout, _state);
+        RefreshStateBindings(GetSelectedInstallationId(JdkListBox), GetSelectedInstallationId(MavenListBox));
+        SetStatus(FormatLocalized(
+            "Maven configuration scope set to: {0}",
+            "Maven 配置作用域已切换为：{0}",
+            option.DisplayName));
+    }
+
+    private async void OnImportMirrorXmlClicked(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Filter = "XML files|*.xml|All files|*.*",
+            CheckFileExists = true
+        };
+
+        if (dialog.ShowDialog(this) != true)
+        {
+            return;
+        }
+
+        await ExecuteBusyWithMessageAsync(
+            Localize("Importing mirror XML...", "正在导入镜像 XML..."),
+            async () =>
+            {
+                var importedMirrors = await Task.Run(() => _mavenConfigurationService.ImportMirrorsFromXmlFile(dialog.FileName));
+                var mergedMirrors = _state.Settings.MavenMirrors
+                    .Where(existing => importedMirrors.All(imported => !imported.Id.Equals(existing.Id, StringComparison.OrdinalIgnoreCase)))
+                    .Concat(importedMirrors)
+                    .OrderBy(existing => existing.Name, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+
+                _state = _state with
+                {
+                    Settings = _state.Settings with
+                    {
+                        MavenMirrors = mergedMirrors
+                    }
+                };
+
+                await Task.Run(() => _stateStore.Save(_layout, _state));
+                RefreshConfiguredMavenMirrors();
+                return FormatLocalized(
+                    "Imported {0} mirror entries from XML.",
+                    "已从 XML 导入 {0} 个镜像条目。",
+                    importedMirrors.Count);
+            });
+    }
+
+    private void OnBrowseMavenToolchainsFileClicked(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Microsoft.Win32.SaveFileDialog
+        {
+            Filter = "Maven toolchains.xml|toolchains.xml|XML files|*.xml",
+            FileName = Path.GetFileName(_state.Settings.MavenToolchainsFilePath),
+            InitialDirectory = Path.GetDirectoryName(MavenToolchainsFilePathTextBox.Text)
+                               ?? Path.GetDirectoryName(_state.Settings.MavenToolchainsFilePath)
+        };
+
+        if (dialog.ShowDialog(this) == true)
+        {
+            MavenToolchainsFilePathTextBox.Text = dialog.FileName;
+        }
+    }
+
+    private void OnOpenMavenSettingsFileClicked(object sender, RoutedEventArgs e)
+    {
+        OpenConfigFileInEditor(
+            MavenSettingsFilePathTextBox.Text,
+            _mavenConfigurationService.EnsureEditableSettingsFile,
+            Localize("settings.xml opened in the editor.", "已在编辑器中打开 settings.xml。"));
+    }
+
+    private void OnOpenMavenToolchainsFileClicked(object sender, RoutedEventArgs e)
+    {
+        OpenConfigFileInEditor(
+            MavenToolchainsFilePathTextBox.Text,
+            _mavenConfigurationService.EnsureEditableToolchainsFile,
+            Localize("toolchains.xml opened in the editor.", "已在编辑器中打开 toolchains.xml。"));
+    }
+
+    private void OpenConfigFileInEditor(string filePath, Action<string> ensureFileExists, string successMessage)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            ShowValidationMessage(Localize(
+                "Enter a configuration file path first.",
+                "请先填写配置文件路径。"));
+            return;
+        }
+
+        try
+        {
+            var normalizedPath = Path.GetFullPath(filePath.Trim());
+            ensureFileExists(normalizedPath);
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "notepad.exe",
+                Arguments = $"\"{normalizedPath}\"",
+                UseShellExecute = true
+            });
+            SetStatus(successMessage);
+        }
+        catch (Exception ex)
+        {
+            ShowValidationMessage(ex.Message);
+        }
+    }
+
+    private JdkDownloadSourceConfiguration? BuildJdkDownloadSourceFromEditor(
+        string? existingId = null,
+        bool isBuiltIn = false,
+        bool requireUrlPrefix = false)
+    {
+        var name = JdkDownloadSourceNameTextBox.Text.Trim();
+        var urlPrefix = JdkDownloadSourceUrlPrefixTextBox.Text.Trim();
+        var providers = JdkDownloadSourceProvidersTextBox.Text.Trim();
+        if (string.IsNullOrWhiteSpace(name)
+            || (requireUrlPrefix && string.IsNullOrWhiteSpace(urlPrefix)))
+        {
+            return null;
+        }
+
+        return new JdkDownloadSourceConfiguration(
+            string.IsNullOrWhiteSpace(existingId) ? BuildMirrorId(name) : existingId,
+            name,
+            NormalizeUrlPrefix(urlPrefix),
+            string.IsNullOrWhiteSpace(providers) ? "*" : providers,
+            isBuiltIn);
+    }
+
+    private MavenDownloadSourceConfiguration? BuildMavenDownloadSourceFromEditor(
+        string? existingId = null,
+        bool isBuiltIn = false)
+    {
+        var name = MavenDownloadSourceNameTextBox.Text.Trim();
+        var baseUrl = MavenDownloadSourceUrlTextBox.Text.Trim();
+        if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(baseUrl))
+        {
+            return null;
+        }
+
+        return new MavenDownloadSourceConfiguration(
+            string.IsNullOrWhiteSpace(existingId) ? BuildMirrorId(name) : existingId,
+            name,
+            baseUrl.Trim().TrimEnd('/'),
+            isBuiltIn);
+    }
+
+    private static string NormalizeUrlPrefix(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        var trimmed = value.Trim();
+        return trimmed.EndsWith("/", StringComparison.Ordinal) ? trimmed : $"{trimmed}/";
     }
 
     private void OnMavenDownloadSourceSelectionChanged(object sender, WpfSelectionChangedEventArgs e)
@@ -1634,6 +2469,14 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (!package.IsDownloadAvailable)
+        {
+            ShowValidationMessage(package.AvailabilityMessage ?? Localize(
+                "The selected JDK download source cannot download this package right now.",
+                "当前 JDK 下载源暂时无法下载这个版本。"));
+            return;
+        }
+
         var preferredJdkId = GetSelectedInstallationId(JdkListBox);
         var preferredMavenId = GetSelectedInstallationId(MavenListBox);
 
@@ -1676,9 +2519,17 @@ public partial class MainWindow : Window
 
     private async Task InstallRemoteMavenAsync(bool switchAfterInstall)
     {
-        if (!TryGetSelectedRemoteMavenVersion(out var version))
+        if (!TryGetSelectedRemoteMavenPackage(out var package))
         {
             ShowValidationWarning("validationSelectRemoteMavenVersion");
+            return;
+        }
+
+        if (!package.IsDownloadAvailable)
+        {
+            ShowValidationMessage(package.AvailabilityMessage ?? Localize(
+                "The selected Maven download source cannot download this package right now.",
+                "当前 Maven 下载源暂时无法下载这个版本。"));
             return;
         }
 
@@ -1690,11 +2541,6 @@ public partial class MainWindow : Window
             async () =>
             {
                 ReportBusyStage("busyInstallingMaven", "busyDetailResolvingPackage", 8);
-                var package = await _mavenSource.ResolveAsync(
-                    version,
-                    CancellationToken.None,
-                    _state.Settings.PreferredMavenDownloadSourceId,
-                    _state.Settings.CustomMavenDownloadSources);
                 var progress = new Progress<PackageInstallProgress>(value => ReportPackageInstallProgress("busyInstallingMaven", value));
                 var installation = await _packageInstallationService.InstallAsync(package, GetManagedLayout(), CancellationToken.None, progress);
                 ReportBusyStage("busyInstallingMaven", "busyDetailRegisteringInstallation", 97);
@@ -1774,16 +2620,15 @@ public partial class MainWindow : Window
         return false;
     }
 
-    private bool TryGetSelectedRemoteMavenVersion(out string version)
+    private bool TryGetSelectedRemoteMavenPackage(out RemotePackageDescriptor package)
     {
-        if (RemoteMavenVersionComboBox.SelectedItem is string selectedVersion
-            && !string.IsNullOrWhiteSpace(selectedVersion))
+        if (RemoteMavenVersionComboBox.SelectedItem is RemotePackageDescriptor selectedPackage)
         {
-            version = selectedVersion;
+            package = selectedPackage;
             return true;
         }
 
-        version = string.Empty;
+        package = null!;
         return false;
     }
 
@@ -1870,10 +2715,18 @@ public partial class MainWindow : Window
     private async Task ApplyMavenSettingsAsync(bool migrateRepository)
     {
         var settingsFilePath = MavenSettingsFilePathTextBox.Text.Trim();
+        var toolchainsFilePath = MavenToolchainsFilePathTextBox.Text.Trim();
         var localRepositoryPath = MavenLocalRepositoryPathTextBox.Text.Trim();
-        if (string.IsNullOrWhiteSpace(settingsFilePath) || string.IsNullOrWhiteSpace(localRepositoryPath))
+        var selectedScope = (MavenConfigurationScopeComboBox.SelectedItem as ConfigurationScopeOption)?.Scope
+                            ?? _state.Settings.MavenConfigurationScope;
+
+        if (string.IsNullOrWhiteSpace(settingsFilePath)
+            || string.IsNullOrWhiteSpace(toolchainsFilePath)
+            || string.IsNullOrWhiteSpace(localRepositoryPath))
         {
-            ShowValidationWarning("validationMavenSettingsPaths");
+            ShowValidationMessage(Localize(
+                "Provide the settings.xml path, toolchains.xml path, and the Maven local repository path.",
+                "请填写 settings.xml 路径、toolchains.xml 路径和 Maven 本地仓库目录。"));
             return;
         }
 
@@ -1887,12 +2740,15 @@ public partial class MainWindow : Window
                     _state.Settings.MavenMirrors,
                     _state.Settings.MavenLocalRepositoryPath,
                     migrateRepository));
+                await Task.Run(() => _mavenConfigurationService.EnsureEditableToolchainsFile(toolchainsFilePath));
 
                 _state = _state with
                 {
                     Settings = _state.Settings with
                     {
+                        MavenConfigurationScope = selectedScope,
                         MavenSettingsFilePath = result.SettingsFilePath,
+                        MavenToolchainsFilePath = Path.GetFullPath(toolchainsFilePath),
                         MavenLocalRepositoryPath = result.LocalRepositoryPath
                     }
                 };
@@ -2251,14 +3107,21 @@ public partial class MainWindow : Window
             return;
         }
 
-        var scrollViewer = FindAncestors<WpfScrollViewer>(dependencyObject).LastOrDefault();
+        var scrollViewer = FindAncestors<WpfScrollViewer>(dependencyObject).Skip(1).FirstOrDefault()
+                           ?? FindAncestors<WpfScrollViewer>(dependencyObject).FirstOrDefault();
         if (scrollViewer is null)
         {
             return;
         }
 
-        scrollViewer.ScrollToVerticalOffset(scrollViewer.VerticalOffset - (e.Delta / 3d));
+        var forwardedEvent = new MouseWheelEventArgs(e.MouseDevice, e.Timestamp, e.Delta)
+        {
+            RoutedEvent = UIElement.MouseWheelEvent,
+            Source = sender
+        };
+
         e.Handled = true;
+        scrollViewer.RaiseEvent(forwardedEvent);
     }
 
     private static T? FindAncestor<T>(DependencyObject? current) where T : DependencyObject
