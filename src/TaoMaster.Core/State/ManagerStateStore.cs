@@ -76,7 +76,24 @@ public sealed class ManagerStateStore
             ? "managed-shell-sync"
             : settings.PathMode;
 
-        if (normalizedPathMode == settings.PathMode)
+        var normalizedInstallRoot = string.IsNullOrWhiteSpace(settings.InstallRoot) ? layout.RootDirectory : settings.InstallRoot;
+        var normalizedCacheRoot = string.IsNullOrWhiteSpace(settings.DownloadCacheRoot) ? layout.CacheRoot : settings.DownloadCacheRoot;
+        var normalizedTempRoot = string.IsNullOrWhiteSpace(settings.TempRoot) ? layout.TempRoot : settings.TempRoot;
+        var normalizedMavenSettingsFilePath = string.IsNullOrWhiteSpace(settings.MavenSettingsFilePath)
+            ? ManagerSettings.GetDefaultMavenSettingsFilePath()
+            : settings.MavenSettingsFilePath;
+        var normalizedMavenLocalRepositoryPath = string.IsNullOrWhiteSpace(settings.MavenLocalRepositoryPath)
+            ? ManagerSettings.GetDefaultMavenLocalRepositoryPath()
+            : settings.MavenLocalRepositoryPath;
+        var normalizedMirrors = settings.MavenMirrors ?? Array.Empty<MavenMirrorConfiguration>();
+
+        if (normalizedPathMode == settings.PathMode
+            && normalizedInstallRoot == settings.InstallRoot
+            && normalizedCacheRoot == settings.DownloadCacheRoot
+            && normalizedTempRoot == settings.TempRoot
+            && normalizedMavenSettingsFilePath == settings.MavenSettingsFilePath
+            && normalizedMavenLocalRepositoryPath == settings.MavenLocalRepositoryPath
+            && normalizedMirrors.SequenceEqual(settings.MavenMirrors ?? Array.Empty<MavenMirrorConfiguration>()))
         {
             return state;
         }
@@ -86,9 +103,12 @@ public sealed class ManagerStateStore
             Settings = settings with
             {
                 PathMode = normalizedPathMode,
-                InstallRoot = string.IsNullOrWhiteSpace(settings.InstallRoot) ? layout.RootDirectory : settings.InstallRoot,
-                DownloadCacheRoot = string.IsNullOrWhiteSpace(settings.DownloadCacheRoot) ? layout.CacheRoot : settings.DownloadCacheRoot,
-                TempRoot = string.IsNullOrWhiteSpace(settings.TempRoot) ? layout.TempRoot : settings.TempRoot
+                InstallRoot = normalizedInstallRoot,
+                DownloadCacheRoot = normalizedCacheRoot,
+                TempRoot = normalizedTempRoot,
+                MavenSettingsFilePath = normalizedMavenSettingsFilePath,
+                MavenLocalRepositoryPath = normalizedMavenLocalRepositoryPath,
+                MavenMirrors = normalizedMirrors
             }
         };
     }

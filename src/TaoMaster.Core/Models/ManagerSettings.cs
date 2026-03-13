@@ -9,6 +9,9 @@ public sealed record ManagerSettings(
     string PathMode,
     string PreferredJdkProvider,
     string PreferredMavenProvider,
+    string MavenSettingsFilePath,
+    string MavenLocalRepositoryPath,
+    IReadOnlyList<MavenMirrorConfiguration> MavenMirrors,
     string PreferredUiLanguage = "SimplifiedChinese")
 {
     public static ManagerSettings CreateDefault(WorkspaceLayout layout) =>
@@ -19,5 +22,20 @@ public sealed record ManagerSettings(
             PathMode: "managed-shell-sync",
             PreferredJdkProvider: "temurin",
             PreferredMavenProvider: "apache",
+            MavenSettingsFilePath: GetDefaultMavenSettingsFilePath(),
+            MavenLocalRepositoryPath: GetDefaultMavenLocalRepositoryPath(),
+            MavenMirrors: Array.Empty<MavenMirrorConfiguration>(),
             PreferredUiLanguage: "SimplifiedChinese");
+
+    public static string GetDefaultMavenSettingsFilePath() =>
+        Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            ".m2",
+            "settings.xml");
+
+    public static string GetDefaultMavenLocalRepositoryPath() =>
+        Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            ".m2",
+            "repository");
 }

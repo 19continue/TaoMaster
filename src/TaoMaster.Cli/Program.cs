@@ -29,6 +29,7 @@ var activationService = new SelectionActivationService(selectionResolver, enviro
 var shellIntegrationService = new WindowsShellIntegrationService(activationService);
 var doctorService = new DoctorService(selectionResolver, environmentService);
 var temurinSource = new TemurinJdkPackageSource(httpClient);
+var oracleSource = new OracleJdkPackageSource(httpClient);
 var mavenSource = new ApacheMavenPackageSource(httpClient);
 var downloadService = new PackageDownloadService(httpClient);
 var checksumService = new ChecksumService();
@@ -371,13 +372,13 @@ async Task RunRemoteAsync(string[] cliArgs)
     switch (cliArgs[1].ToLowerInvariant())
     {
         case "jdks":
-            var packages = await temurinSource.GetLatestPackagesByFeatureAsync("x64", CancellationToken.None);
-            Console.WriteLine("Temurin 可安装 JDK 版本（每个特性线当前最新补丁）");
-            foreach (var package in packages)
+            var temurinPackages = await temurinSource.GetLatestPackagesByFeatureAsync("x64", CancellationToken.None);
+            var oraclePackages = await oracleSource.GetAvailablePackagesAsync(CancellationToken.None);
+            Console.WriteLine("可安装 JDK 版本");
+            foreach (var package in temurinPackages.Concat(oraclePackages))
             {
-                Console.WriteLine($"- {package.DisplayName}");
+                Console.WriteLine($"- [{package.Provider}] {package.DisplayName}");
             }
-            Console.WriteLine("Oracle JDK 当前支持本机发现和导入管理，远程下载源暂未接入。");
             break;
         case "mavens":
             var versions = await mavenSource.GetCurrentVersionsAsync(CancellationToken.None);
@@ -451,7 +452,14 @@ async Task<RemotePackageDescriptor> ResolveJdkPackageAsync(string[] cliArgs)
 {
     var versionText = GetOptionValue(cliArgs, "--version");
     var architecture = GetOptionValue(cliArgs, "--arch") ?? "x64";
-    return await temurinSource.ResolveAsync(versionText, architecture, CancellationToken.None);
+    var provider = (GetOptionValue(cliArgs, "--provider") ?? stateStore.EnsureInitialized(layout).Settings.PreferredJdkProvider).ToLowerInvariant();
+
+    return provider switch
+    {
+        "oracle" => await oracleSource.ResolveAsync(versionText, CancellationToken.None),
+        "temurin" => await temurinSource.ResolveAsync(versionText, architecture, CancellationToken.None),
+        _ => throw new ArgumentException("JDK 下载源仅支持 `temurin` 或 `oracle`。")
+    };
 }
 
 async Task<RemotePackageDescriptor> ResolveMavenPackageAsync(string[] cliArgs)
@@ -510,7 +518,7 @@ static void PrintHelp(WorkspaceLayout layout)
     Console.WriteLine("  remove maven <id>");
     Console.WriteLine("  uninstall jdk <id>");
     Console.WriteLine("  uninstall maven <id>");
-    Console.WriteLine("  install jdk [--version 21.0.10|21] [--arch x64] [--switch]");
+    Console.WriteLine("  install jdk [--provider temurin|oracle] [--version 21.0.10|21] [--arch x64] [--switch]");
     Console.WriteLine("  install maven [--version 3.9.14] [--switch]");
     Console.WriteLine("  doctor");
     Console.WriteLine("  repair user-path");

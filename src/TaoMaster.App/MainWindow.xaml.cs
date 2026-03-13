@@ -1,8 +1,10 @@
 using System.Collections.ObjectModel;
 using System.Runtime.Versioning;
 using System.Windows;
+using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Media3D;
 using Forms = System.Windows.Forms;
 using TaoMaster.App.Localization;
 using TaoMaster.Core;
@@ -48,14 +50,17 @@ public partial class MainWindow : Window
     private readonly DoctorService _doctorService;
     private readonly System.Net.Http.HttpClient _httpClient;
     private readonly TemurinJdkPackageSource _temurinSource;
+    private readonly OracleJdkPackageSource _oracleSource;
     private readonly ApacheMavenPackageSource _mavenSource;
     private readonly PackageInstallationService _packageInstallationService;
+    private readonly MavenConfigurationService _mavenConfigurationService;
 
     private ManagerState _state;
     private DoctorReport? _lastDoctorReport;
     private ShellIntegrationStatus? _shellIntegrationStatus;
     private AppLocalizer _localizer;
     private readonly ObservableCollection<string> _activityEntries = [];
+    private readonly ObservableCollection<MavenMirrorConfiguration> _configuredMavenMirrors = [];
     private bool _hasLoaded;
     private bool _suppressLanguageSelectionChanged;
     private AppSection _currentSection = AppSection.Dashboard;
@@ -76,7 +81,9 @@ public partial class MainWindow : Window
         _doctorService = new DoctorService(_selectionResolver, _environmentService);
         _httpClient = new System.Net.Http.HttpClient();
         _temurinSource = new TemurinJdkPackageSource(_httpClient);
+        _oracleSource = new OracleJdkPackageSource(_httpClient);
         _mavenSource = new ApacheMavenPackageSource(_httpClient);
+        _mavenConfigurationService = new MavenConfigurationService();
 
         var downloadService = new PackageDownloadService(_httpClient);
         var checksumService = new ChecksumService();
@@ -88,6 +95,8 @@ public partial class MainWindow : Window
 
         InitializeComponent();
         ActivityListBox.ItemsSource = _activityEntries;
+        ConfiguredMavenMirrorsListBox.ItemsSource = _configuredMavenMirrors;
+        BuiltInMavenMirrorComboBox.ItemsSource = _mavenConfigurationService.GetBuiltInMirrors();
         InitializeLanguageSelector();
         ApplyCurrentSection();
         ApplyLocalization();
@@ -217,12 +226,32 @@ public partial class MainWindow : Window
 
     private void ApplyLocalizationRecursive(DependencyObject root)
     {
+        ApplyLocalizationRecursive(root, new HashSet<DependencyObject>());
+    }
+
+    private void ApplyLocalizationRecursive(DependencyObject root, ISet<DependencyObject> visited)
+    {
+        if (!visited.Add(root))
+        {
+            return;
+        }
+
         ApplyLocalizationToElement(root);
+
+        foreach (var child in LogicalTreeHelper.GetChildren(root).OfType<DependencyObject>())
+        {
+            ApplyLocalizationRecursive(child, visited);
+        }
+
+        if (root is not Visual && root is not Visual3D)
+        {
+            return;
+        }
 
         var childCount = VisualTreeHelper.GetChildrenCount(root);
         for (var index = 0; index < childCount; index++)
         {
-            ApplyLocalizationRecursive(VisualTreeHelper.GetChild(root, index));
+            ApplyLocalizationRecursive(VisualTreeHelper.GetChild(root, index), visited);
         }
     }
 
@@ -235,6 +264,9 @@ public partial class MainWindow : Window
                 break;
             case WpfButton button when button.Tag is string key:
                 button.Content = _localizer[key];
+                break;
+            case Run run when run.Tag is string key:
+                run.Text = _localizer[key];
                 break;
         }
     }
@@ -252,6 +284,9 @@ public partial class MainWindow : Window
         AppVersionTextBlock.Text = ProductInfo.Version;
         ShellSyncStatusTextBlock.Text = BuildShellSyncStatusText();
         ShellSyncDetailTextBlock.Text = BuildShellSyncDetailText();
+        MavenSettingsFilePathTextBox.Text = _state.Settings.MavenSettingsFilePath;
+        MavenLocalRepositoryPathTextBox.Text = _state.Settings.MavenLocalRepositoryPath;
+        RefreshConfiguredMavenMirrors();
 
         var selection = _selectionResolver.Resolve(_state);
         DashboardCurrentJdkTextBlock.Text = selection.Jdk?.DisplayName ?? _localizer["nonePlaceholder"];
@@ -287,6 +322,23 @@ public partial class MainWindow : Window
         {
             DoctorOutputTextBox.Text = _localizer["doctorPlaceholder"];
         }
+    }
+
+    private void RefreshConfiguredMavenMirrors()
+    {
+        _configuredMavenMirrors.Clear();
+        foreach (var mirror in _state.Settings.MavenMirrors)
+        {
+            _configuredMavenMirrors.Add(mirror);
+        }
+
+        if (ConfiguredMavenMirrorsListBox.SelectedItem is not MavenMirrorConfiguration selectedMirror)
+        {
+            return;
+        }
+
+        ConfiguredMavenMirrorsListBox.SelectedItem = _configuredMavenMirrors.FirstOrDefault(mirror =>
+            mirror.Id.Equals(selectedMirror.Id, StringComparison.OrdinalIgnoreCase));
     }
 
     private static void SelectInstallation(
@@ -636,21 +688,30 @@ public partial class MainWindow : Window
 
     private async Task RefreshRemoteVersionsCoreAsync()
     {
-        var currentJdkVersion = RemoteJdkVersionComboBox.SelectedItem as RemotePackageDescriptor;
+        var currentJdkPackage = RemoteJdkVersionComboBox.SelectedItem as RemotePackageDescriptor;
         var currentMavenVersion = RemoteMavenVersionComboBox.SelectedItem as string;
 
-        var jdkTask = _temurinSource.GetLatestPackagesByFeatureAsync("x64", CancellationToken.None);
+        var temurinTask = _temurinSource.GetLatestPackagesByFeatureAsync("x64", CancellationToken.None);
+        var oracleTask = _oracleSource.GetAvailablePackagesAsync(CancellationToken.None);
         var mavenTask = _mavenSource.GetCurrentVersionsAsync(CancellationToken.None);
 
-        await Task.WhenAll(jdkTask, mavenTask);
+        await Task.WhenAll(temurinTask, oracleTask, mavenTask);
 
-        var jdkVersions = (await jdkTask).ToList();
+        var jdkVersions = (await temurinTask)
+            .Concat(await oracleTask)
+            .OrderByDescending(package => ParseRemoteJdkSortKey(package.Version))
+            .ThenBy(package => package.Provider, StringComparer.OrdinalIgnoreCase)
+            .ToList();
         var mavenVersions = (await mavenTask).ToList();
 
         RemoteJdkVersionComboBox.ItemsSource = jdkVersions;
-        RemoteJdkVersionComboBox.SelectedItem = currentJdkVersion is not null
-                                                 && jdkVersions.Any(package => package.Version.Equals(currentJdkVersion.Version, StringComparison.OrdinalIgnoreCase))
-            ? jdkVersions.First(package => package.Version.Equals(currentJdkVersion.Version, StringComparison.OrdinalIgnoreCase))
+        RemoteJdkVersionComboBox.SelectedItem = currentJdkPackage is not null
+                                                 && jdkVersions.Any(package =>
+                                                     package.Version.Equals(currentJdkPackage.Version, StringComparison.OrdinalIgnoreCase)
+                                                     && package.Provider.Equals(currentJdkPackage.Provider, StringComparison.OrdinalIgnoreCase))
+            ? jdkVersions.First(package =>
+                package.Version.Equals(currentJdkPackage.Version, StringComparison.OrdinalIgnoreCase)
+                && package.Provider.Equals(currentJdkPackage.Provider, StringComparison.OrdinalIgnoreCase))
             : jdkVersions.FirstOrDefault();
 
         RemoteMavenVersionComboBox.ItemsSource = mavenVersions;
@@ -658,6 +719,15 @@ public partial class MainWindow : Window
                                                  && mavenVersions.Contains(currentMavenVersion, StringComparer.OrdinalIgnoreCase)
             ? mavenVersions.First(version => version.Equals(currentMavenVersion, StringComparison.OrdinalIgnoreCase))
             : mavenVersions.FirstOrDefault();
+    }
+
+    private static int ParseRemoteJdkSortKey(string version)
+    {
+        var featureText = version.StartsWith("8u", StringComparison.OrdinalIgnoreCase)
+            ? "8"
+            : version.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault() ?? version;
+
+        return int.TryParse(featureText, out var featureVersion) ? featureVersion : 0;
     }
 
     private string BuildShellPreviewText(string shellKind)
@@ -834,6 +904,26 @@ public partial class MainWindow : Window
         BrowseForFolder(MavenImportPathTextBox, "browseMavenDescription");
     }
 
+    private void OnBrowseMavenSettingsFileClicked(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Microsoft.Win32.SaveFileDialog
+        {
+            Filter = "Maven settings.xml|settings.xml|XML files|*.xml",
+            FileName = Path.GetFileName(_state.Settings.MavenSettingsFilePath),
+            InitialDirectory = Path.GetDirectoryName(MavenSettingsFilePathTextBox.Text) ?? Path.GetDirectoryName(_state.Settings.MavenSettingsFilePath)
+        };
+
+        if (dialog.ShowDialog(this) == true)
+        {
+            MavenSettingsFilePathTextBox.Text = dialog.FileName;
+        }
+    }
+
+    private void OnBrowseMavenLocalRepositoryClicked(object sender, RoutedEventArgs e)
+    {
+        BrowseForFolder(MavenLocalRepositoryPathTextBox, "browseMavenLocalRepositoryDescription");
+    }
+
     private void BrowseForFolder(WpfTextBox textBox, string descriptionKey)
     {
         using var dialog = new Forms.FolderBrowserDialog
@@ -847,6 +937,96 @@ public partial class MainWindow : Window
         {
             textBox.Text = dialog.SelectedPath;
         }
+    }
+
+    private void OnAddBuiltInMirrorClicked(object sender, RoutedEventArgs e)
+    {
+        if (BuiltInMavenMirrorComboBox.SelectedItem is not MavenMirrorConfiguration mirror)
+        {
+            ShowValidationWarning("validationSelectBuiltInMirror");
+            return;
+        }
+
+        AddMirrorToState(mirror with { IsBuiltIn = true });
+    }
+
+    private void OnAddCustomMirrorClicked(object sender, RoutedEventArgs e)
+    {
+        var name = CustomMavenMirrorNameTextBox.Text.Trim();
+        var url = CustomMavenMirrorUrlTextBox.Text.Trim();
+        var mirrorOf = CustomMavenMirrorOfTextBox.Text.Trim();
+
+        if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(url))
+        {
+            ShowValidationWarning("validationCustomMirror");
+            return;
+        }
+
+        var mirror = new MavenMirrorConfiguration(
+            Id: BuildMirrorId(name),
+            Name: name,
+            Url: url,
+            MirrorOf: string.IsNullOrWhiteSpace(mirrorOf) ? "*" : mirrorOf,
+            IsBuiltIn: false);
+
+        AddMirrorToState(mirror);
+        CustomMavenMirrorNameTextBox.Clear();
+        CustomMavenMirrorUrlTextBox.Clear();
+        CustomMavenMirrorOfTextBox.Text = "*";
+    }
+
+    private void AddMirrorToState(MavenMirrorConfiguration mirror)
+    {
+        var mirrors = _state.Settings.MavenMirrors
+            .Where(existing => !existing.Id.Equals(mirror.Id, StringComparison.OrdinalIgnoreCase))
+            .Concat([mirror])
+            .OrderBy(existing => existing.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        _state = _state with
+        {
+            Settings = _state.Settings with
+            {
+                MavenMirrors = mirrors
+            }
+        };
+
+        _stateStore.Save(_layout, _state);
+        RefreshConfiguredMavenMirrors();
+        SetStatus(_localizer.Format("mavenMirrorAddedStatus", mirror.Name));
+    }
+
+    private void OnRemoveSelectedMirrorClicked(object sender, RoutedEventArgs e)
+    {
+        if (ConfiguredMavenMirrorsListBox.SelectedItem is not MavenMirrorConfiguration mirror)
+        {
+            ShowValidationWarning("validationSelectConfiguredMirror");
+            return;
+        }
+
+        _state = _state with
+        {
+            Settings = _state.Settings with
+            {
+                MavenMirrors = _state.Settings.MavenMirrors
+                    .Where(existing => !existing.Id.Equals(mirror.Id, StringComparison.OrdinalIgnoreCase))
+                    .ToList()
+            }
+        };
+
+        _stateStore.Save(_layout, _state);
+        RefreshConfiguredMavenMirrors();
+        SetStatus(_localizer.Format("mavenMirrorRemovedStatus", mirror.Name));
+    }
+
+    private async void OnApplyMavenSettingsClicked(object sender, RoutedEventArgs e)
+    {
+        await ApplyMavenSettingsAsync(migrateRepository: false);
+    }
+
+    private async void OnMigrateMavenRepositoryClicked(object sender, RoutedEventArgs e)
+    {
+        await ApplyMavenSettingsAsync(migrateRepository: true);
     }
 
     private async void OnSyncClicked(object sender, RoutedEventArgs e)
@@ -1287,6 +1467,46 @@ public partial class MainWindow : Window
             });
     }
 
+    private async Task ApplyMavenSettingsAsync(bool migrateRepository)
+    {
+        var settingsFilePath = MavenSettingsFilePathTextBox.Text.Trim();
+        var localRepositoryPath = MavenLocalRepositoryPathTextBox.Text.Trim();
+        if (string.IsNullOrWhiteSpace(settingsFilePath) || string.IsNullOrWhiteSpace(localRepositoryPath))
+        {
+            ShowValidationWarning("validationMavenSettingsPaths");
+            return;
+        }
+
+        await ExecuteBusyAsync(
+            migrateRepository ? "busyMigratingMavenRepository" : "busyApplyingMavenSettings",
+            async () =>
+            {
+                var result = await Task.Run(() => _mavenConfigurationService.ApplySettings(
+                    settingsFilePath,
+                    localRepositoryPath,
+                    _state.Settings.MavenMirrors,
+                    _state.Settings.MavenLocalRepositoryPath,
+                    migrateRepository));
+
+                _state = _state with
+                {
+                    Settings = _state.Settings with
+                    {
+                        MavenSettingsFilePath = result.SettingsFilePath,
+                        MavenLocalRepositoryPath = result.LocalRepositoryPath
+                    }
+                };
+
+                await Task.Run(() => _stateStore.Save(_layout, _state));
+                RefreshStateBindings(GetSelectedInstallationId(JdkListBox), GetSelectedInstallationId(MavenListBox));
+
+                return result.RepositoryMigrated
+                    ? _localizer.Format("mavenRepositoryMigratedStatus", result.LocalRepositoryPath)
+                    : _localizer.Format("mavenSettingsAppliedStatus", result.SettingsFilePath);
+            },
+            ShowSuccessDialog);
+    }
+
     private void OnCopyPowerShellScriptClicked(object sender, RoutedEventArgs e)
     {
         CopyShellScript("powershell", "powerShellScriptCopiedStatus");
@@ -1321,6 +1541,23 @@ public partial class MainWindow : Window
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
         }
+    }
+
+    private static string BuildMirrorId(string name)
+    {
+        var sanitized = new string(name
+            .Trim()
+            .ToLowerInvariant()
+            .Select(character => char.IsLetterOrDigit(character) ? character : '-')
+            .ToArray());
+
+        while (sanitized.Contains("--", StringComparison.Ordinal))
+        {
+            sanitized = sanitized.Replace("--", "-", StringComparison.Ordinal);
+        }
+
+        sanitized = sanitized.Trim('-');
+        return string.IsNullOrWhiteSpace(sanitized) ? "custom-mirror" : sanitized;
     }
 
     private bool ConfirmRemoval(ManagedInstallation installation, bool deleteFiles)

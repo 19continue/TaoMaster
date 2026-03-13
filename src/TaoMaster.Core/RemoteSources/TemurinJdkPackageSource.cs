@@ -6,6 +6,11 @@ namespace TaoMaster.Core.RemoteSources;
 
 public sealed class TemurinJdkPackageSource
 {
+    private static readonly IReadOnlyList<int> FallbackFeatureReleases =
+    [
+        25, 24, 23, 22, 21, 20, 19, 18, 17, 11, 8
+    ];
+
     private readonly HttpClient _httpClient;
 
     public TemurinJdkPackageSource(HttpClient httpClient)
@@ -22,9 +27,14 @@ public sealed class TemurinJdkPackageSource
         var payload = await JsonSerializer.DeserializeAsync<AvailableReleasesResponse>(stream, cancellationToken: cancellationToken)
             ?? throw new InvalidOperationException("无法读取 Temurin 可用版本列表。");
 
-        return payload.AvailableReleases
-            .OrderByDescending(x => x)
+        var releases = payload.AvailableReleases
+            .Where(release => release > 0)
+            .OrderByDescending(release => release)
             .ToList();
+
+        return releases.Count > 0
+            ? releases
+            : FallbackFeatureReleases;
     }
 
     public async Task<IReadOnlyList<RemotePackageDescriptor>> GetLatestPackagesByFeatureAsync(
