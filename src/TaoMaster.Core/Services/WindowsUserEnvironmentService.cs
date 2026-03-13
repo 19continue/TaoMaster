@@ -75,6 +75,33 @@ public sealed class WindowsUserEnvironmentService
             new[] { machinePath, userPath }.Where(value => !string.IsNullOrWhiteSpace(value)));
     }
 
+    public IReadOnlyList<ResolvedExecutableCandidate> FindExecutableCandidates(
+        string executableName,
+        string? userPathOverride,
+        IReadOnlyDictionary<string, string?> variables)
+    {
+        var matches = new List<ResolvedExecutableCandidate>();
+        var segmentIndex = 0;
+
+        AddExecutableCandidates(
+            matches,
+            executableName,
+            GetMachineVariable(EnvironmentVariableNames.Path),
+            EnvironmentPathScope.Machine,
+            variables,
+            ref segmentIndex);
+
+        AddExecutableCandidates(
+            matches,
+            executableName,
+            userPathOverride ?? GetUserVariable(EnvironmentVariableNames.Path),
+            EnvironmentPathScope.User,
+            variables,
+            ref segmentIndex);
+
+        return matches;
+    }
+
     public string? ResolveExecutable(
         string executableName,
         string effectivePath,
@@ -96,6 +123,35 @@ public sealed class WindowsUserEnvironmentService
         }
 
         return null;
+    }
+
+    public UserPathRepairResult RepairUserPathForManagedToolchains(
+        string? existingUserPath,
+        bool includeJavaEntry,
+        bool includeMavenEntry)
+    {
+        var removedSegments = new List<string>();
+        var retainedSegments = new List<string>();
+        var variables = BuildVariableMap(
+            GetUserVariable(EnvironmentVariableNames.JavaHome),
+            GetUserVariable(EnvironmentVariableNames.MavenHome),
+            GetUserVariable(EnvironmentVariableNames.M2Home));
+
+        foreach (var segment in SplitPath(existingUserPath))
+        {
+            if (IsManagedPathEntry(segment) || IsDirectToolchainPath(segment, variables))
+            {
+                removedSegments.Add(segment);
+                continue;
+            }
+
+            retainedSegments.Add(segment);
+        }
+
+        var retainedPath = string.Join(";", retainedSegments);
+        var updatedPath = BuildManagedUserPath(retainedPath, includeJavaEntry, includeMavenEntry);
+
+        return new UserPathRepairResult(updatedPath, removedSegments);
     }
 
     public string BuildProcessPath(string effectivePath, string? selectedJdkHome, string? selectedMavenHome)
@@ -223,13 +279,103 @@ public sealed class WindowsUserEnvironmentService
         .Where(segment => !string.IsNullOrWhiteSpace(segment))
         .ToList();
 
+    private static void AddExecutableCandidates(
+        ICollection<ResolvedExecutableCandidate> matches,
+        string executableName,
+        string? pathValue,
+        EnvironmentPathScope scope,
+        IReadOnlyDictionary<string, string?> variables,
+        ref int segmentIndex)
+    {
+        foreach (var segment in SplitPath(pathValue))
+        {
+            var currentIndex = segmentIndex++;
+            var expandedSegment = ExpandPathSegment(segment, variables);
+
+            if (string.IsNullOrWhiteSpace(expandedSegment) || !Directory.Exists(expandedSegment))
+            {
+                continue;
+            }
+
+            var candidatePath = Path.Combine(expandedSegment, executableName);
+            if (!File.Exists(candidatePath))
+            {
+                continue;
+            }
+
+            matches.Add(new ResolvedExecutableCandidate(
+                executableName,
+                candidatePath,
+                segment,
+                expandedSegment,
+                scope,
+                currentIndex));
+        }
+    }
+
     private static bool IsManagedPathEntry(string segment) =>
         segment.Equals(EnvironmentVariableNames.ManagedJavaPathEntry, StringComparison.OrdinalIgnoreCase)
         || segment.Equals(EnvironmentVariableNames.ManagedMavenPathEntry, StringComparison.OrdinalIgnoreCase);
 
+    private static bool IsDirectToolchainPath(
+        string segment,
+        IReadOnlyDictionary<string, string?> variables)
+    {
+        var expandedSegment = ExpandPathSegment(segment, variables);
+        if (string.IsNullOrWhiteSpace(expandedSegment))
+        {
+            return false;
+        }
+
+        if (!Directory.Exists(expandedSegment))
+        {
+            return LooksLikeToolchainPath(expandedSegment);
+        }
+
+        return File.Exists(Path.Combine(expandedSegment, "java.exe"))
+               || File.Exists(Path.Combine(expandedSegment, "javac.exe"))
+               || File.Exists(Path.Combine(expandedSegment, "mvn.cmd"))
+               || File.Exists(Path.Combine(expandedSegment, "mvn.bat"))
+               || LooksLikeToolchainPath(expandedSegment);
+    }
+
     private static bool ShouldUseExpandString(string name, string value) =>
         name.Equals(EnvironmentVariableNames.Path, StringComparison.OrdinalIgnoreCase)
         || value.Contains('%', StringComparison.Ordinal);
+
+    private static string ExpandPathSegment(
+        string segment,
+        IReadOnlyDictionary<string, string?> variables)
+    {
+        var expanded = segment;
+
+        foreach (var pair in variables.Where(x => !string.IsNullOrWhiteSpace(x.Key)))
+        {
+            expanded = expanded.Replace(
+                $"%{pair.Key}%",
+                pair.Value ?? string.Empty,
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        return Environment.ExpandEnvironmentVariables(expanded);
+    }
+
+    private static bool LooksLikeToolchainPath(string path)
+    {
+        var normalized = path.Replace('/', '\\').TrimEnd('\\');
+        var leaf = Path.GetFileName(normalized);
+        var parent = Path.GetFileName(Path.GetDirectoryName(normalized) ?? string.Empty);
+
+        return leaf.Equals("javapath", StringComparison.OrdinalIgnoreCase)
+               || (leaf.Equals("bin", StringComparison.OrdinalIgnoreCase)
+                   && (parent.Contains("jdk", StringComparison.OrdinalIgnoreCase)
+                       || parent.Contains("jre", StringComparison.OrdinalIgnoreCase)
+                       || parent.Contains("maven", StringComparison.OrdinalIgnoreCase)
+                       || normalized.Contains(@"\jdks\", StringComparison.OrdinalIgnoreCase)
+                       || normalized.Contains(@"\mavens\", StringComparison.OrdinalIgnoreCase)
+                       || normalized.Contains("apache-maven", StringComparison.OrdinalIgnoreCase)
+                       || normalized.Contains(@"\java\", StringComparison.OrdinalIgnoreCase)));
+    }
 
     [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
     private static extern bool SendMessageTimeout(

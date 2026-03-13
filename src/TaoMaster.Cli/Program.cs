@@ -78,6 +78,9 @@ try
         case "doctor":
             RunDoctor();
             break;
+        case "repair":
+            RunRepair(args);
+            break;
         case "env":
             RunEnv(args);
             break;
@@ -236,6 +239,39 @@ void RunDoctor()
 
     Console.WriteLine();
     Console.WriteLine($"汇总: PASS={report.Checks.Count(x => x.Status == DoctorCheckStatus.Pass)}, WARN={report.Checks.Count(x => x.Status == DoctorCheckStatus.Warn)}, FAIL={report.Checks.Count(x => x.Status == DoctorCheckStatus.Fail)}");
+}
+
+void RunRepair(string[] cliArgs)
+{
+    if (cliArgs.Length < 2 || !cliArgs[1].Equals("user-path", StringComparison.OrdinalIgnoreCase))
+    {
+        throw new ArgumentException("用法：`repair user-path`。");
+    }
+
+    var state = stateStore.EnsureInitialized(layout);
+    var selection = selectionResolver.Resolve(state);
+    var result = environmentService.RepairUserPathForManagedToolchains(
+        environmentService.GetUserVariable(EnvironmentVariableNames.Path),
+        includeJavaEntry: selection.Jdk is not null,
+        includeMavenEntry: selection.Maven is not null);
+
+    environmentService.SetUserVariable(EnvironmentVariableNames.Path, result.UpdatedPath);
+    activationService.Apply(state);
+
+    Console.WriteLine("User PATH repair completed.");
+    Console.WriteLine($"Removed segments: {result.RemovedSegments.Count}");
+
+    foreach (var removedSegment in result.RemovedSegments)
+    {
+        Console.WriteLine($"- {removedSegment}");
+    }
+
+    if (result.RemovedSegments.Count == 0)
+    {
+        Console.WriteLine("No conflicting direct JDK or Maven entries were found in user PATH.");
+    }
+
+    Console.WriteLine($"Updated PATH: {result.UpdatedPath}");
 }
 
 void RunEnv(string[] cliArgs)
@@ -399,6 +435,7 @@ static void PrintHelp(WorkspaceLayout layout)
     Console.WriteLine("  install jdk [--version 17] [--arch x64] [--switch]");
     Console.WriteLine("  install maven [--version 3.9.14] [--switch]");
     Console.WriteLine("  doctor");
+    Console.WriteLine("  repair user-path");
     Console.WriteLine("  env powershell");
     Console.WriteLine("  env cmd");
     Console.WriteLine();

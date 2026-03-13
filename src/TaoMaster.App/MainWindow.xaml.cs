@@ -648,6 +648,33 @@ public partial class MainWindow : Window
             });
     }
 
+    private async void OnRepairUserPathClicked(object sender, RoutedEventArgs e)
+    {
+        await ExecuteBusyAsync(
+            "busyRepairingUserPath",
+            async () =>
+            {
+                var selection = _selectionResolver.Resolve(_state);
+                var result = await Task.Run(() => _environmentService.RepairUserPathForManagedToolchains(
+                    _environmentService.GetUserVariable(EnvironmentVariableNames.Path),
+                    includeJavaEntry: selection.Jdk is not null,
+                    includeMavenEntry: selection.Maven is not null));
+
+                await Task.Run(() =>
+                {
+                    _environmentService.SetUserVariable(EnvironmentVariableNames.Path, result.UpdatedPath);
+                    _activationService.Apply(_state);
+                });
+
+                _lastDoctorReport = await Task.Run(() => _doctorService.Run(_state));
+                RefreshStateBindings(GetSelectedInstallationId(JdkListBox), GetSelectedInstallationId(MavenListBox));
+
+                return result.Changed
+                    ? _localizer.Format("userPathRepairedStatus", result.RemovedSegments.Count)
+                    : _localizer["userPathAlreadyCleanStatus"];
+            });
+    }
+
     private async void OnRefreshRemoteClicked(object sender, RoutedEventArgs e)
     {
         await ExecuteBusyAsync(
@@ -706,11 +733,12 @@ public partial class MainWindow : Window
             userPath,
             includeJavaEntry: selection.Jdk is not null,
             includeMavenEntry: selection.Maven is not null);
-        var effectivePath = _environmentService.BuildEffectivePathForNewProcesses(expectedUserPath);
         var variableMap = _environmentService.BuildVariableMap(
             selection.Jdk?.HomeDirectory ?? userJavaHome,
             selection.Maven?.HomeDirectory ?? userMavenHome,
             selection.Maven?.HomeDirectory ?? userM2Home);
+        var javaCandidates = _environmentService.FindExecutableCandidates("java.exe", expectedUserPath, variableMap);
+        var mavenCandidates = _environmentService.FindExecutableCandidates("mvn.cmd", expectedUserPath, variableMap);
 
         var lines = new List<string>
         {
@@ -730,8 +758,8 @@ public partial class MainWindow : Window
                          userM2Home,
                          userPath,
                          expectedUserPath,
-                         effectivePath,
-                         variableMap))
+                         javaCandidates,
+                         mavenCandidates))
             {
                 lines.Add($"    {detailLine}");
             }
@@ -755,8 +783,8 @@ public partial class MainWindow : Window
         string? userM2Home,
         string? userPath,
         string expectedUserPath,
-        string effectivePath,
-        IReadOnlyDictionary<string, string?> variableMap)
+        IReadOnlyList<ResolvedExecutableCandidate> javaCandidates,
+        IReadOnlyList<ResolvedExecutableCandidate> mavenCandidates)
     {
         return check.Code switch
         {
@@ -768,12 +796,12 @@ public partial class MainWindow : Window
             "user-path" => check.Status == DoctorCheckStatus.Pass
                 ? BuildActualDetail(userPath)
                 : BuildExpectedActualDetails(expectedUserPath, userPath),
-            "java-resolve" => BuildExpectedActualDetails(
+            "java-resolve" => BuildExecutableResolutionDetails(
                 selection.Jdk is null ? null : Path.Combine(selection.Jdk.HomeDirectory, "bin", "java.exe"),
-                selection.Jdk is null ? null : _environmentService.ResolveExecutable("java.exe", effectivePath, variableMap)),
-            "maven-resolve" => BuildExpectedActualDetails(
+                javaCandidates),
+            "maven-resolve" => BuildExecutableResolutionDetails(
                 selection.Maven is null ? null : Path.Combine(selection.Maven.HomeDirectory, "bin", "mvn.cmd"),
-                selection.Maven is null ? null : _environmentService.ResolveExecutable("mvn.cmd", effectivePath, variableMap)),
+                mavenCandidates),
             "maven-probe" => BuildOutputDetails(check.Detail),
             _ => BuildOutputDetails(check.Detail)
         };
@@ -812,6 +840,39 @@ public partial class MainWindow : Window
             lines.Add($"{_localizer["detailActualLabel"]}: {actual}");
         }
 
+        return lines;
+    }
+
+    private IEnumerable<string> BuildExecutableResolutionDetails(
+        string? expected,
+        IReadOnlyList<ResolvedExecutableCandidate> candidates)
+    {
+        var lines = new List<string>();
+
+        if (!string.IsNullOrWhiteSpace(expected))
+        {
+            lines.Add($"{_localizer["detailExpectedLabel"]}: {expected}");
+        }
+
+        var winningCandidate = candidates.FirstOrDefault();
+        if (winningCandidate is null)
+        {
+            lines.Add($"{_localizer["detailActualLabel"]}: (none)");
+            return lines;
+        }
+
+        lines.Add($"{_localizer["detailActualLabel"]}: {winningCandidate.CandidatePath}");
+        lines.Add($"{_localizer["detailScopeLabel"]}: {_localizer[winningCandidate.Scope == EnvironmentPathScope.Machine ? "pathScopeMachine" : "pathScopeUser"]}");
+        lines.Add($"{_localizer["detailPathEntryLabel"]}: {winningCandidate.OriginalPathSegment}");
+
+        var recommendation = !string.IsNullOrWhiteSpace(expected)
+                             && string.Equals(winningCandidate.CandidatePath, expected, StringComparison.OrdinalIgnoreCase)
+            ? _localizer["doctorNoActionNeeded"]
+            : winningCandidate.Scope == EnvironmentPathScope.Machine
+                ? _localizer["doctorRepairMachinePathRecommendation"]
+                : _localizer["doctorRepairUserPathRecommendation"];
+
+        lines.Add($"{_localizer["detailRecommendationLabel"]}: {recommendation}");
         return lines;
     }
 

@@ -434,6 +434,10 @@
                                         Content="Run Doctor"
                                         Style="{StaticResource ActionButtonStyle}"
                                         Click="OnRunDoctorClicked" />
+                                <Button Tag="repairUserPathButton"
+                                        Content="Repair User PATH"
+                                        Style="{StaticResource AccentButtonStyle}"
+                                        Click="OnRepairUserPathClicked" />
                                 <Button Tag="refreshRemoteButton"
                                         Content="Refresh Remote Versions"
                                         Style="{StaticResource SecondaryButtonStyle}"

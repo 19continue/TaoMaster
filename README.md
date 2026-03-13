@@ -20,6 +20,7 @@
 - 在用户级环境变量上切换 `JAVA_HOME`、`MAVEN_HOME`、`M2_HOME`
 - 维护受控 `PATH` 入口，让 Maven 能跟随当前 JDK 切换
 - 运行 `doctor` 诊断，检查状态选择、环境变量、PATH 解析与 Maven/JDK 联动
+- 清理用户级 PATH 中残留的直接 JDK / Maven 入口，并重新应用当前选中的环境
 - 生成当前终端可立即生效的 PowerShell / cmd 激活脚本
 - 提供 WPF 桌面端界面
 - 桌面端当前支持 `English` 与 `简体中文` 两种界面语言
@@ -64,6 +65,7 @@ dotnet run --project .\src\TaoMaster.Cli -- install jdk --version 17 --switch
 dotnet run --project .\src\TaoMaster.Cli -- install maven --version 3.9.14
 dotnet run --project .\src\TaoMaster.Cli -- install maven --version 3.9.14 --switch
 dotnet run --project .\src\TaoMaster.Cli -- doctor
+dotnet run --project .\src\TaoMaster.Cli -- repair user-path
 dotnet run --project .\src\TaoMaster.Cli -- env powershell
 dotnet run --project .\src\TaoMaster.Cli -- env cmd
 dotnet build .\TaoMaster.sln -m:1
@@ -82,6 +84,7 @@ dotnet run --project .\src\TaoMaster.App
 - 下载并安装
 - 一键切换
 - Doctor 结果展示
+- 用户级 PATH 冲突清理
 - PowerShell / cmd 激活脚本复制
 - 英文 / 简体中文界面切换
 - 上次语言选择持久化

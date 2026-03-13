@@ -37,33 +37,50 @@ public sealed class DoctorService
         if (selection.Jdk is not null)
         {
             checks.Add(PathUtilities.Comparer.Equals(selection.Jdk.HomeDirectory, userJavaHome)
-                ? new DoctorCheck(DoctorCheckStatus.Pass, "java-home", "用户级 JAVA_HOME 与当前选中 JDK 一致。", userJavaHome)
-                : new DoctorCheck(DoctorCheckStatus.Fail, "java-home", "用户级 JAVA_HOME 与当前选中 JDK 不一致。", $"期望: {selection.Jdk.HomeDirectory}，实际: {userJavaHome ?? "(空)"}"));
+                ? new DoctorCheck(DoctorCheckStatus.Pass, "java-home", "User JAVA_HOME matches the selected JDK.", userJavaHome)
+                : new DoctorCheck(
+                    DoctorCheckStatus.Fail,
+                    "java-home",
+                    "User JAVA_HOME does not match the selected JDK.",
+                    $"Expected: {selection.Jdk.HomeDirectory}{Environment.NewLine}Actual: {userJavaHome ?? "(empty)"}"));
         }
         else
         {
-            checks.Add(new DoctorCheck(DoctorCheckStatus.Warn, "java-home", "当前没有选中的 JDK。"));
+            checks.Add(new DoctorCheck(DoctorCheckStatus.Warn, "java-home", "No JDK is selected, so JAVA_HOME is not validated."));
         }
 
         if (selection.Maven is not null)
         {
             checks.Add(PathUtilities.Comparer.Equals(selection.Maven.HomeDirectory, userMavenHome)
-                ? new DoctorCheck(DoctorCheckStatus.Pass, "maven-home", "用户级 MAVEN_HOME 与当前选中 Maven 一致。", userMavenHome)
-                : new DoctorCheck(DoctorCheckStatus.Fail, "maven-home", "用户级 MAVEN_HOME 与当前选中 Maven 不一致。", $"期望: {selection.Maven.HomeDirectory}，实际: {userMavenHome ?? "(空)"}"));
+                ? new DoctorCheck(DoctorCheckStatus.Pass, "maven-home", "User MAVEN_HOME matches the selected Maven.", userMavenHome)
+                : new DoctorCheck(
+                    DoctorCheckStatus.Fail,
+                    "maven-home",
+                    "User MAVEN_HOME does not match the selected Maven.",
+                    $"Expected: {selection.Maven.HomeDirectory}{Environment.NewLine}Actual: {userMavenHome ?? "(empty)"}"));
 
             checks.Add(PathUtilities.Comparer.Equals(selection.Maven.HomeDirectory, userM2Home)
-                ? new DoctorCheck(DoctorCheckStatus.Pass, "m2-home", "用户级 M2_HOME 与当前选中 Maven 一致。", userM2Home)
-                : new DoctorCheck(DoctorCheckStatus.Fail, "m2-home", "用户级 M2_HOME 与当前选中 Maven 不一致。", $"期望: {selection.Maven.HomeDirectory}，实际: {userM2Home ?? "(空)"}"));
+                ? new DoctorCheck(DoctorCheckStatus.Pass, "m2-home", "User M2_HOME matches the selected Maven.", userM2Home)
+                : new DoctorCheck(
+                    DoctorCheckStatus.Fail,
+                    "m2-home",
+                    "User M2_HOME does not match the selected Maven.",
+                    $"Expected: {selection.Maven.HomeDirectory}{Environment.NewLine}Actual: {userM2Home ?? "(empty)"}"));
         }
         else
         {
-            checks.Add(new DoctorCheck(DoctorCheckStatus.Warn, "maven-home", "当前没有选中的 Maven。"));
+            checks.Add(new DoctorCheck(DoctorCheckStatus.Warn, "maven-home", "No Maven is selected, so MAVEN_HOME is not validated."));
+            checks.Add(new DoctorCheck(DoctorCheckStatus.Warn, "m2-home", "No Maven is selected, so M2_HOME is not validated."));
         }
 
         checks.Add(
             string.Equals(userPath ?? string.Empty, expectedUserPath, StringComparison.OrdinalIgnoreCase)
-                ? new DoctorCheck(DoctorCheckStatus.Pass, "user-path", "用户级 PATH 里的受控入口顺序正确。")
-                : new DoctorCheck(DoctorCheckStatus.Fail, "user-path", "用户级 PATH 里的受控入口缺失、重复或顺序不正确。", $"期望 PATH 前缀: {expectedUserPath}"));
+                ? new DoctorCheck(DoctorCheckStatus.Pass, "user-path", "User PATH contains the managed entries in the expected order.", userPath)
+                : new DoctorCheck(
+                    DoctorCheckStatus.Fail,
+                    "user-path",
+                    "User PATH is missing managed entries, contains duplicates, or has an unexpected order.",
+                    $"Expected: {expectedUserPath}{Environment.NewLine}Actual: {userPath ?? "(empty)"}"));
 
         var effectivePath = _environmentService.BuildEffectivePathForNewProcesses(expectedUserPath);
         var variableMap = _environmentService.BuildVariableMap(
@@ -73,21 +90,21 @@ public sealed class DoctorService
 
         if (selection.Jdk is not null)
         {
-            var resolvedJava = _environmentService.ResolveExecutable("java.exe", effectivePath, variableMap);
+            var javaCandidates = _environmentService.FindExecutableCandidates("java.exe", expectedUserPath, variableMap);
             checks.Add(ResolvedExecutableCheck(
                 "java-resolve",
                 "java.exe",
-                resolvedJava,
+                javaCandidates,
                 Path.Combine(selection.Jdk.HomeDirectory, "bin", "java.exe")));
         }
 
         if (selection.Maven is not null)
         {
-            var resolvedMaven = _environmentService.ResolveExecutable("mvn.cmd", effectivePath, variableMap);
+            var mavenCandidates = _environmentService.FindExecutableCandidates("mvn.cmd", expectedUserPath, variableMap);
             checks.Add(ResolvedExecutableCheck(
                 "maven-resolve",
                 "mvn.cmd",
-                resolvedMaven,
+                mavenCandidates,
                 Path.Combine(selection.Maven.HomeDirectory, "bin", "mvn.cmd")));
         }
 
@@ -103,12 +120,12 @@ public sealed class DoctorService
                 ? new DoctorCheck(
                     DoctorCheckStatus.Pass,
                     "maven-probe",
-                    "选中的 Maven 能够使用当前选中的 JDK 启动。",
+                    "The selected Maven starts with the selected JDK.",
                     probe.JavaVersionLine ?? probe.Output)
                 : new DoctorCheck(
                     DoctorCheckStatus.Fail,
                     "maven-probe",
-                    "选中的 Maven 无法使用当前选中的 JDK 正常启动。",
+                    "The selected Maven could not start with the selected JDK.",
                     probe.Output));
         }
 
@@ -121,31 +138,53 @@ public sealed class DoctorService
         ActiveToolchainSelection selection)
     {
         checks.Add(string.IsNullOrWhiteSpace(state.ActiveSelection.JdkId)
-            ? new DoctorCheck(DoctorCheckStatus.Warn, "selected-jdk", "状态文件中还没有选中的 JDK。")
+            ? new DoctorCheck(DoctorCheckStatus.Warn, "selected-jdk", "No JDK is selected in state.")
             : selection.Jdk is not null
-                ? new DoctorCheck(DoctorCheckStatus.Pass, "selected-jdk", "状态文件中的当前 JDK 选择有效。", selection.Jdk.DisplayName)
-                : new DoctorCheck(DoctorCheckStatus.Fail, "selected-jdk", "状态文件中的 JDK 选择已失效。", state.ActiveSelection.JdkId));
+                ? new DoctorCheck(DoctorCheckStatus.Pass, "selected-jdk", "Active JDK selection is valid.", selection.Jdk.DisplayName)
+                : new DoctorCheck(DoctorCheckStatus.Fail, "selected-jdk", "The saved JDK selection points to a missing installation.", state.ActiveSelection.JdkId));
 
         checks.Add(string.IsNullOrWhiteSpace(state.ActiveSelection.MavenId)
-            ? new DoctorCheck(DoctorCheckStatus.Warn, "selected-maven", "状态文件中还没有选中的 Maven。")
+            ? new DoctorCheck(DoctorCheckStatus.Warn, "selected-maven", "No Maven is selected in state.")
             : selection.Maven is not null
-                ? new DoctorCheck(DoctorCheckStatus.Pass, "selected-maven", "状态文件中的当前 Maven 选择有效。", selection.Maven.DisplayName)
-                : new DoctorCheck(DoctorCheckStatus.Fail, "selected-maven", "状态文件中的 Maven 选择已失效。", state.ActiveSelection.MavenId));
+                ? new DoctorCheck(DoctorCheckStatus.Pass, "selected-maven", "Active Maven selection is valid.", selection.Maven.DisplayName)
+                : new DoctorCheck(DoctorCheckStatus.Fail, "selected-maven", "The saved Maven selection points to a missing installation.", state.ActiveSelection.MavenId));
     }
 
     private static DoctorCheck ResolvedExecutableCheck(
         string code,
         string executableName,
-        string? actualPath,
+        IReadOnlyList<ResolvedExecutableCandidate> candidates,
         string expectedPath)
     {
-        if (string.IsNullOrWhiteSpace(actualPath))
+        var winningCandidate = candidates.FirstOrDefault();
+        if (winningCandidate is null)
         {
-            return new DoctorCheck(DoctorCheckStatus.Fail, code, $"未能在新进程 PATH 中解析到 {executableName}。");
+            return new DoctorCheck(
+                DoctorCheckStatus.Fail,
+                code,
+                $"{executableName} cannot be resolved from a new process PATH.",
+                $"Expected: {expectedPath}");
         }
 
-        return PathUtilities.Comparer.Equals(actualPath, expectedPath)
-            ? new DoctorCheck(DoctorCheckStatus.Pass, code, $"{executableName} 在新进程 PATH 中解析正确。", actualPath)
-            : new DoctorCheck(DoctorCheckStatus.Warn, code, $"{executableName} 在新进程 PATH 中解析到了其他位置。", $"期望: {expectedPath}，实际: {actualPath}");
+        var detail = BuildExecutableResolutionDetail(winningCandidate, expectedPath);
+        return PathUtilities.Comparer.Equals(winningCandidate.CandidatePath, expectedPath)
+            ? new DoctorCheck(DoctorCheckStatus.Pass, code, $"{executableName} resolves to the selected toolchain in a new process.", detail)
+            : new DoctorCheck(DoctorCheckStatus.Warn, code, $"{executableName} resolves to a different location in a new process.", detail);
+    }
+
+    private static string BuildExecutableResolutionDetail(
+        ResolvedExecutableCandidate winningCandidate,
+        string expectedPath)
+    {
+        var scope = winningCandidate.Scope == EnvironmentPathScope.Machine ? "machine" : "user";
+        var recommendation = winningCandidate.Scope == EnvironmentPathScope.Machine
+            ? "Remove or reorder the winning machine PATH entry in System Properties > Environment Variables."
+            : "Run `taomaster repair user-path` or use the desktop action to remove conflicting user PATH entries.";
+
+        return $"Expected: {expectedPath}{Environment.NewLine}"
+               + $"Actual: {winningCandidate.CandidatePath}{Environment.NewLine}"
+               + $"Scope: {scope}{Environment.NewLine}"
+               + $"PATH entry: {winningCandidate.OriginalPathSegment}{Environment.NewLine}"
+               + $"Recommendation: {recommendation}";
     }
 }
