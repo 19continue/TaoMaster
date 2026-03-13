@@ -42,6 +42,7 @@ public partial class MainWindow : Window
     private readonly ToolchainSelectionResolver _selectionResolver;
     private readonly WindowsUserEnvironmentService _environmentService;
     private readonly SelectionActivationService _activationService;
+    private readonly WindowsShellIntegrationService _shellIntegrationService;
     private readonly DoctorService _doctorService;
     private readonly System.Net.Http.HttpClient _httpClient;
     private readonly TemurinJdkPackageSource _temurinSource;
@@ -50,6 +51,7 @@ public partial class MainWindow : Window
 
     private ManagerState _state;
     private DoctorReport? _lastDoctorReport;
+    private ShellIntegrationStatus? _shellIntegrationStatus;
     private AppLocalizer _localizer;
     private readonly ObservableCollection<string> _activityEntries = [];
     private bool _hasLoaded;
@@ -68,6 +70,7 @@ public partial class MainWindow : Window
         _selectionResolver = new ToolchainSelectionResolver();
         _environmentService = new WindowsUserEnvironmentService();
         _activationService = new SelectionActivationService(_selectionResolver, _environmentService);
+        _shellIntegrationService = new WindowsShellIntegrationService(_activationService);
         _doctorService = new DoctorService(_selectionResolver, _environmentService);
         _httpClient = new System.Net.Http.HttpClient();
         _temurinSource = new TemurinJdkPackageSource(_httpClient);
@@ -110,6 +113,7 @@ public partial class MainWindow : Window
             async () =>
             {
                 _state = await Task.Run(() => _stateStore.EnsureInitialized(_layout));
+                _shellIntegrationStatus = await Task.Run(() => _shellIntegrationService.EnsureEnabled(_layout, _state));
                 ApplyPersistedLanguagePreference();
                 RefreshStateBindings();
 
@@ -117,6 +121,12 @@ public partial class MainWindow : Window
 
                 return _localizer.Format("workspaceLoadedStatus", _state.Jdks.Count, _state.Mavens.Count);
             });
+    }
+
+    private void ApplyActivationWithShellIntegration(ManagerState state)
+    {
+        _activationService.Apply(state);
+        _shellIntegrationStatus = _shellIntegrationService.EnsureEnabled(_layout, state);
     }
 
     private void InitializeLanguageSelector()
@@ -223,13 +233,17 @@ public partial class MainWindow : Window
 
     private void RefreshStateBindings(string? preferredJdkId = null, string? preferredMavenId = null)
     {
+        _shellIntegrationStatus = _shellIntegrationService.GetStatus(_layout);
+
         SidebarWorkspaceTextBlock.Text = _layout.RootDirectory;
         SidebarScopeTextBlock.Text = _localizer["scopeGlobal"];
         WorkspaceRootTextBlock.Text = _layout.RootDirectory;
         StateFileTextBlock.Text = _layout.StateFile;
         InstallRootTextBlock.Text = _state.Settings.InstallRoot;
-        PathModeTextBlock.Text = _state.Settings.PathMode;
+        PathModeTextBlock.Text = BuildPathModeText();
         AppVersionTextBlock.Text = ProductInfo.Version;
+        ShellSyncStatusTextBlock.Text = BuildShellSyncStatusText();
+        ShellSyncDetailTextBlock.Text = BuildShellSyncDetailText();
 
         var selection = _selectionResolver.Resolve(_state);
         DashboardCurrentJdkTextBlock.Text = selection.Jdk?.DisplayName ?? _localizer["nonePlaceholder"];
@@ -339,9 +353,47 @@ public partial class MainWindow : Window
         button.Background = isActive
             ? new SolidColorBrush(MediaColor.FromRgb(30, 138, 102))
             : System.Windows.Media.Brushes.Transparent;
+        button.BorderBrush = isActive
+            ? new SolidColorBrush(MediaColor.FromRgb(137, 208, 183))
+            : System.Windows.Media.Brushes.Transparent;
         button.Foreground = isActive
             ? System.Windows.Media.Brushes.White
             : new SolidColorBrush(MediaColor.FromRgb(199, 213, 206));
+    }
+
+    private string BuildPathModeText()
+    {
+        if (_shellIntegrationStatus?.IsEnabled == true)
+        {
+            return _localizer["settingsPathModeManagedShell"];
+        }
+
+        return _localizer["settingsPathModeManagedOnly"];
+    }
+
+    private string BuildShellSyncStatusText()
+    {
+        if (_shellIntegrationStatus is null)
+        {
+            return _localizer["shellSyncStatusPending"];
+        }
+
+        return _shellIntegrationStatus.IsEnabled
+            ? _localizer["shellSyncStatusEnabled"]
+            : _localizer["shellSyncStatusPartial"];
+    }
+
+    private string BuildShellSyncDetailText()
+    {
+        if (_shellIntegrationStatus is null)
+        {
+            return _localizer["shellSyncDetailPending"];
+        }
+
+        return _localizer.Format(
+            _shellIntegrationStatus.IsEnabled ? "shellSyncDetailEnabled" : "shellSyncDetailPartial",
+            _shellIntegrationStatus.PowerShellEnabledProfileCount,
+            _shellIntegrationStatus.PowerShellProfileCount);
     }
 
     private void RefreshEnvironmentHealth(ActiveToolchainSelection selection)
@@ -384,7 +436,11 @@ public partial class MainWindow : Window
             pathHealthOk,
             pathHealthOk ? "healthReady" : "healthAttention",
             PathHealthHintTextBlock,
-            pathHealthOk ? _localizer["healthPathReadyHint"] : _localizer["healthPathCheckHint"]);
+            pathHealthOk
+                ? _shellIntegrationStatus?.IsEnabled == true
+                    ? _localizer["healthPathShellSyncHint"]
+                    : _localizer["healthPathReadyHint"]
+                : _localizer["healthPathCheckHint"]);
 
         if (_lastDoctorReport is null)
         {
@@ -476,6 +532,11 @@ public partial class MainWindow : Window
         var userMavenHome = _environmentService.GetUserVariable(EnvironmentVariableNames.MavenHome) ?? _localizer["nonePlaceholder"];
         var userM2Home = _environmentService.GetUserVariable(EnvironmentVariableNames.M2Home) ?? _localizer["nonePlaceholder"];
         var userPath = _environmentService.GetUserVariable(EnvironmentVariableNames.Path) ?? _localizer["nonePlaceholder"];
+        var shellSyncStatus = _shellIntegrationStatus is null
+            ? _localizer["shellSyncStatusPending"]
+            : _shellIntegrationStatus.IsEnabled
+                ? _localizer["shellSyncStatusEnabled"]
+                : _localizer["shellSyncStatusPartial"];
 
         return string.Join(Environment.NewLine, new[]
         {
@@ -485,6 +546,7 @@ public partial class MainWindow : Window
             $"{_localizer["snapshotJavaHomeLabel"]}: {userJavaHome}",
             $"{_localizer["snapshotMavenHomeLabel"]}: {userMavenHome}",
             $"{_localizer["snapshotM2HomeLabel"]}: {userM2Home}",
+            $"{_localizer["snapshotShellSyncLabel"]}: {shellSyncStatus}",
             $"{_localizer["snapshotPathLabel"]}: {userPath}"
         });
     }
@@ -829,7 +891,7 @@ public partial class MainWindow : Window
                     _ => _state
                 };
 
-                await Task.Run(() => _activationService.Apply(updatedState));
+                await Task.Run(() => ApplyActivationWithShellIntegration(updatedState));
                 await Task.Run(() => _stateStore.Save(_layout, updatedState));
 
                 _state = updatedState;
@@ -909,7 +971,7 @@ public partial class MainWindow : Window
                         ActiveSelection = updatedState.ActiveSelection with { JdkId = installation.Id }
                     };
 
-                    await Task.Run(() => _activationService.Apply(updatedState));
+                    await Task.Run(() => ApplyActivationWithShellIntegration(updatedState));
                 }
 
                 await Task.Run(() => _stateStore.Save(_layout, updatedState));
@@ -948,7 +1010,7 @@ public partial class MainWindow : Window
                         ActiveSelection = updatedState.ActiveSelection with { MavenId = installation.Id }
                     };
 
-                    await Task.Run(() => _activationService.Apply(updatedState));
+                    await Task.Run(() => ApplyActivationWithShellIntegration(updatedState));
                 }
 
                 await Task.Run(() => _stateStore.Save(_layout, updatedState));
@@ -988,7 +1050,7 @@ public partial class MainWindow : Window
 
                 await Task.Run(() => _stateStore.Save(_layout, result.State));
                 _state = result.State;
-                await Task.Run(() => _activationService.Apply(result.State));
+                await Task.Run(() => ApplyActivationWithShellIntegration(result.State));
 
                 InvalidateDoctorOutput();
                 RefreshStateBindings(preferredJdkId, preferredMavenId);
@@ -1030,6 +1092,7 @@ public partial class MainWindow : Window
             {
                 _lastDoctorReport = await Task.Run(() => _doctorService.Run(_state));
                 DoctorOutputTextBox.Text = BuildDoctorOutput(_lastDoctorReport);
+                RefreshEnvironmentHealth(_selectionResolver.Resolve(_state));
 
                 return _localizer.Format(
                     "doctorCompletedStatus",
@@ -1054,7 +1117,7 @@ public partial class MainWindow : Window
                 await Task.Run(() =>
                 {
                     _environmentService.SetUserVariable(EnvironmentVariableNames.Path, result.UpdatedPath);
-                    _activationService.Apply(_state);
+                    ApplyActivationWithShellIntegration(_state);
                 });
 
                 _lastDoctorReport = await Task.Run(() => _doctorService.Run(_state));
@@ -1313,10 +1376,13 @@ public partial class MainWindow : Window
         lines.Add($"{_localizer["detailScopeLabel"]}: {_localizer[winningCandidate.Scope == EnvironmentPathScope.Machine ? "pathScopeMachine" : "pathScopeUser"]}");
         lines.Add($"{_localizer["detailPathEntryLabel"]}: {winningCandidate.OriginalPathSegment}");
 
-        var recommendation = !string.IsNullOrWhiteSpace(expected)
-                             && string.Equals(winningCandidate.CandidatePath, expected, StringComparison.OrdinalIgnoreCase)
+        var expectedMatched = !string.IsNullOrWhiteSpace(expected)
+                              && string.Equals(winningCandidate.CandidatePath, expected, StringComparison.OrdinalIgnoreCase);
+        var recommendation = expectedMatched
             ? _localizer["doctorNoActionNeeded"]
-            : winningCandidate.Scope == EnvironmentPathScope.Machine
+            : winningCandidate.Scope == EnvironmentPathScope.Machine && _shellIntegrationStatus?.IsEnabled == true
+                ? _localizer["doctorShellSyncRecommendation"]
+                : winningCandidate.Scope == EnvironmentPathScope.Machine
                 ? _localizer["doctorRepairMachinePathRecommendation"]
                 : _localizer["doctorRepairUserPathRecommendation"];
 

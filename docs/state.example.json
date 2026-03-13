@@ -3,7 +3,7 @@
     "installRoot": "%LOCALAPPDATA%\\TaoMaster",
     "downloadCacheRoot": "%LOCALAPPDATA%\\TaoMaster\\cache",
     "tempRoot": "%LOCALAPPDATA%\\TaoMaster\\temp",
-    "pathMode": "managed-segments",
+    "pathMode": "managed-shell-sync",
     "preferredJdkProvider": "temurin",
     "preferredMavenProvider": "apache"
   },

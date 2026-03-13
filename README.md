@@ -23,6 +23,7 @@
 - 下载并安装新的 Temurin JDK 与 Apache Maven 版本
 - 切换用户级 `JAVA_HOME`、`MAVEN_HOME`、`M2_HOME`
 - 维护受控 `PATH` 入口，让 Maven 跟随当前 JDK 切换
+- 新开的 `cmd` / PowerShell 会话自动同步当前选中的 JDK / Maven
 - 运行 `doctor` 诊断状态、环境变量、PATH 解析结果与 Maven/JDK 联动
 - 清理用户级 `PATH` 中残留的直接 JDK / Maven 入口
 - 生成机器级 `PATH` 冲突修复脚本，供管理员 PowerShell 执行
@@ -38,6 +39,7 @@
 - `JAVA_HOME` 始终指向当前选中的 JDK 根目录
 - `MAVEN_HOME` 与 `M2_HOME` 始终指向当前选中的 Maven 根目录
 - 用户级 `PATH` 只保留 `%JAVA_HOME%\bin` 和 `%MAVEN_HOME%\bin` 两个受控入口
+- 新开的 `cmd` / PowerShell 会话会通过用户级 shell 集成把当前选中的 JDK / Maven 重新放到会话最前面
 
 这样新开的 `cmd`、PowerShell、IDE 和 `mvn` 都会读取同一套环境变量，Maven 也会自然感知 JDK 的切换结果。
 
@@ -99,6 +101,7 @@ dotnet run --project .\src\TaoMaster.App
 - 用户级 `PATH` 冲突清理
 - 机器级 `PATH` 修复脚本复制
 - PowerShell / cmd 激活脚本复制
+- 新开的 `cmd` / PowerShell 自动同步当前工具链
 - 英文 / 简体中文界面切换
 
 ## 工作区与迁移
@@ -109,16 +112,21 @@ dotnet run --project .\src\TaoMaster.App
 
 ## 机器级 PATH 说明
 
-如果机器级 `PATH` 里存在更靠前的 `java.exe` 或 `mvn.cmd`，新开的终端直接执行 `java` / `mvn` 时，仍可能优先命中系统安装。
+如果机器级 `PATH` 里存在更靠前的 `java.exe` 或 `mvn.cmd`，道驭现在会先通过 shell 集成保证新开的 `cmd` / PowerShell 使用当前选中的工具链；但对 IDE、服务进程或其他非 shell 进程来说，机器级冲突仍然值得修复。
 
 当前策略是：
 
 - 用户级环境变量始终由道驭受控
+- 新开的 `cmd` / PowerShell 会自动同步当前工具链
 - `doctor` 会标出命中的机器级冲突入口
 - `repair machine-path-script` 会生成管理员 PowerShell 修复脚本
 - 桌面端也可以一键复制该脚本到剪贴板
 
 脚本不会自动提权执行。它的作用是让管理员明确看到将被移除的机器级 `PATH` 段，并在确认后手动运行。
+
+## JDK 8 提示
+
+如果当前切换到 `JDK 8`，请使用 `java -version` 检查版本。`java --version` 是较新的 JDK 才支持的参数，在 `JDK 8` 下会直接报错。
 
 ## 已验证
 

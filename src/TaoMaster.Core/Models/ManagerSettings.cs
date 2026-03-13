@@ -16,7 +16,7 @@ public sealed record ManagerSettings(
             InstallRoot: layout.RootDirectory,
             DownloadCacheRoot: layout.CacheRoot,
             TempRoot: layout.TempRoot,
-            PathMode: "managed-segments",
+            PathMode: "managed-shell-sync",
             PreferredJdkProvider: "temurin",
             PreferredMavenProvider: "apache",
             PreferredUiLanguage: "auto");

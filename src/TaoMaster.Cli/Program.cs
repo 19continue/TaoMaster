@@ -26,6 +26,7 @@ var catalogService = new InstallationCatalogService(inspector);
 var selectionResolver = new ToolchainSelectionResolver();
 var environmentService = new WindowsUserEnvironmentService();
 var activationService = new SelectionActivationService(selectionResolver, environmentService);
+var shellIntegrationService = new WindowsShellIntegrationService(activationService);
 var doctorService = new DoctorService(selectionResolver, environmentService);
 var temurinSource = new TemurinJdkPackageSource(httpClient);
 var mavenSource = new ApacheMavenPackageSource(httpClient);
@@ -202,6 +203,7 @@ void RunUse(string[] cliArgs)
     };
 
     var activationResult = activationService.Apply(updatedState);
+    var shellIntegrationStatus = shellIntegrationService.EnsureEnabled(layout, updatedState);
     stateStore.Save(layout, updatedState);
 
     Console.WriteLine("切换成功。");
@@ -218,6 +220,8 @@ void RunUse(string[] cliArgs)
     {
         Console.WriteLine($"MAVEN_HOME : {activationResult.UserMavenHome}");
     }
+
+    Console.WriteLine($"Shell sync : cmd={(shellIntegrationStatus.CmdAutoRunEnabled ? "on" : "off")}, powershell={shellIntegrationStatus.PowerShellEnabledProfileCount}/{shellIntegrationStatus.PowerShellProfileCount}");
 }
 
 void RunRemove(string[] cliArgs, bool deleteFiles)
@@ -236,6 +240,7 @@ void RunRemove(string[] cliArgs, bool deleteFiles)
 
     stateStore.Save(layout, result.State);
     activationService.Apply(result.State);
+    shellIntegrationService.EnsureEnabled(layout, result.State);
 
     Console.WriteLine(deleteFiles ? "Uninstall completed." : "Removal completed.");
     Console.WriteLine($"Kind     : {result.Installation.Kind}");
@@ -292,6 +297,7 @@ void RunRepair(string[] cliArgs)
 
         environmentService.SetUserVariable(EnvironmentVariableNames.Path, result.UpdatedPath);
         activationService.Apply(state);
+        shellIntegrationService.EnsureEnabled(layout, state);
 
         Console.WriteLine("User PATH repair completed.");
         Console.WriteLine($"Removed segments: {result.RemovedSegments.Count}");
@@ -428,6 +434,7 @@ async Task RunInstallAsync(string[] cliArgs)
     if (switchAfterInstall)
     {
         activationService.Apply(updatedState);
+        shellIntegrationService.EnsureEnabled(layout, updatedState);
     }
 
     Console.WriteLine("安装完成。");

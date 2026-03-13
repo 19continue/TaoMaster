@@ -10,65 +10,197 @@
         Height="940"
         MinWidth="1260"
         MinHeight="820"
-        Background="#E8ECE8"
+        Background="#F4F6F2"
         FontFamily="Microsoft YaHei UI"
         Loaded="OnLoaded">
     <Window.Resources>
-        <SolidColorBrush x:Key="PageBrush" Color="#E8ECE8" />
+        <SolidColorBrush x:Key="PageBrush" Color="#F4F6F2" />
         <SolidColorBrush x:Key="PanelBrush" Color="#FCFDFB" />
-        <SolidColorBrush x:Key="PanelAltBrush" Color="#EEF3EF" />
-        <SolidColorBrush x:Key="SidebarBrush" Color="#13211B" />
-        <SolidColorBrush x:Key="SidebarCardBrush" Color="#1D2F26" />
-        <SolidColorBrush x:Key="InkBrush" Color="#17241E" />
-        <SolidColorBrush x:Key="MutedBrush" Color="#68766F" />
-        <SolidColorBrush x:Key="AccentBrush" Color="#1E8A66" />
-        <SolidColorBrush x:Key="AccentSoftBrush" Color="#D8EFE6" />
-        <SolidColorBrush x:Key="WarningBrush" Color="#D08A2F" />
-        <SolidColorBrush x:Key="DangerBrush" Color="#C45140" />
-        <SolidColorBrush x:Key="InfoBrush" Color="#2C6CA6" />
+        <SolidColorBrush x:Key="PanelAltBrush" Color="#F1F4EF" />
+        <SolidColorBrush x:Key="SurfaceBrush" Color="#FFFFFF" />
+        <SolidColorBrush x:Key="SidebarBrush" Color="#16221D" />
+        <SolidColorBrush x:Key="SidebarCardBrush" Color="#1C2D25" />
+        <SolidColorBrush x:Key="SidebarHoverBrush" Color="#21372D" />
+        <SolidColorBrush x:Key="InkBrush" Color="#1B2621" />
+        <SolidColorBrush x:Key="MutedBrush" Color="#6D7B73" />
+        <SolidColorBrush x:Key="SoftLineBrush" Color="#DCE5DD" />
+        <SolidColorBrush x:Key="AccentBrush" Color="#287A63" />
+        <SolidColorBrush x:Key="AccentSoftBrush" Color="#E0EFE8" />
+        <SolidColorBrush x:Key="AccentSurfaceBrush" Color="#F3F8F4" />
+        <SolidColorBrush x:Key="WarningBrush" Color="#C88A36" />
+        <SolidColorBrush x:Key="DangerBrush" Color="#BF6557" />
+        <SolidColorBrush x:Key="InfoBrush" Color="#3A6F9E" />
+        <DropShadowEffect x:Key="CardShadow"
+                          BlurRadius="18"
+                          ShadowDepth="2"
+                          Direction="270"
+                          Color="#0F241A"
+                          Opacity="0.08" />
         <Style x:Key="CardStyle" TargetType="Border">
             <Setter Property="Background" Value="{StaticResource PanelBrush}" />
-            <Setter Property="CornerRadius" Value="22" />
-            <Setter Property="Padding" Value="22" />
-            <Setter Property="Margin" Value="0,0,0,18" />
+            <Setter Property="CornerRadius" Value="14" />
+            <Setter Property="Padding" Value="18" />
+            <Setter Property="Margin" Value="0,0,0,24" />
+            <Setter Property="Effect" Value="{StaticResource CardShadow}" />
         </Style>
         <Style x:Key="SectionTitleStyle" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="22" />
+            <Setter Property="FontSize" Value="20" />
             <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="Foreground" Value="{StaticResource InkBrush}" />
         </Style>
         <Style x:Key="BodyTextStyle" TargetType="TextBlock">
             <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />
-            <Setter Property="FontSize" Value="13.5" />
+            <Setter Property="FontSize" Value="13" />
             <Setter Property="TextWrapping" Value="Wrap" />
         </Style>
-        <Style x:Key="ActionButtonStyle" TargetType="Button">
-            <Setter Property="Background" Value="{StaticResource AccentBrush}" />
-            <Setter Property="Foreground" Value="White" />
-            <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="Padding" Value="14,10" />
-            <Setter Property="Margin" Value="0,0,10,10" />
+        <Style x:Key="BaseButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="{StaticResource SurfaceBrush}" />
+            <Setter Property="Foreground" Value="{StaticResource InkBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource SoftLineBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="14,9" />
+            <Setter Property="Margin" Value="0,0,12,12" />
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="ButtonBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="8">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              Margin="{TemplateBinding Padding}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ButtonBorder" Property="Opacity" Value="0.94" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="ButtonBorder" Property="Opacity" Value="0.82" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="ButtonBorder" Property="Opacity" Value="0.5" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="ActionButtonStyle" TargetType="Button" BasedOn="{StaticResource BaseButtonStyle}">
+            <Setter Property="Background" Value="{StaticResource AccentBrush}" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
         </Style>
         <Style x:Key="SecondaryButtonStyle" TargetType="Button" BasedOn="{StaticResource ActionButtonStyle}">
-            <Setter Property="Background" Value="#E3EBE5" />
+            <Setter Property="Background" Value="{StaticResource SurfaceBrush}" />
             <Setter Property="Foreground" Value="{StaticResource InkBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource SoftLineBrush}" />
         </Style>
         <Style x:Key="DangerButtonStyle" TargetType="Button" BasedOn="{StaticResource ActionButtonStyle}">
-            <Setter Property="Background" Value="#F3E0DD" />
+            <Setter Property="Background" Value="#F8EEEC" />
             <Setter Property="Foreground" Value="{StaticResource DangerBrush}" />
+            <Setter Property="BorderBrush" Value="#F1D9D4" />
         </Style>
         <Style x:Key="NavButtonStyle" TargetType="Button">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="Foreground" Value="#C7D5CE" />
+            <Setter Property="BorderBrush" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="Padding" Value="14,12" />
-            <Setter Property="Margin" Value="0,0,0,8" />
+            <Setter Property="Padding" Value="14,10" />
+            <Setter Property="Margin" Value="0,0,0,6" />
             <Setter Property="HorizontalContentAlignment" Value="Left" />
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="FontSize" Value="14" />
             <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="NavBorder"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="10">
+                            <Grid>
+                                <Border x:Name="NavRail"
+                                        Width="3"
+                                        Margin="0,10,0,10"
+                                        HorizontalAlignment="Left"
+                                        Background="{TemplateBinding BorderBrush}"
+                                        CornerRadius="2" />
+                                <ContentPresenter Margin="{TemplateBinding Padding}"
+                                                  HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                                  VerticalAlignment="Center" />
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="NavBorder" Property="Background" Value="{StaticResource SidebarHoverBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="InputTextBoxStyle" TargetType="TextBox">
+            <Setter Property="Background" Value="{StaticResource SurfaceBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource SoftLineBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="12,8" />
+            <Setter Property="Foreground" Value="{StaticResource InkBrush}" />
+            <Setter Property="FontSize" Value="13" />
+        </Style>
+        <Style x:Key="InputComboBoxStyle" TargetType="ComboBox">
+            <Setter Property="Background" Value="{StaticResource SurfaceBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource SoftLineBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="10,6" />
+            <Setter Property="Foreground" Value="{StaticResource InkBrush}" />
+            <Setter Property="FontSize" Value="13" />
+        </Style>
+        <Style x:Key="CleanListBoxStyle" TargetType="ListBox">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+        </Style>
+        <Style x:Key="SelectablePanelListItemStyle" TargetType="ListBoxItem">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Margin" Value="0,0,0,12" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="ItemBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="12">
+                            <Grid>
+                                <Border x:Name="SelectionRail"
+                                        Width="4"
+                                        Margin="10,12,0,12"
+                                        HorizontalAlignment="Left"
+                                        Background="Transparent"
+                                        CornerRadius="2" />
+                                <ContentPresenter Margin="20,0,0,0"
+                                                  HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" />
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ItemBorder" Property="Background" Value="{StaticResource AccentSurfaceBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="ItemBorder" Property="Background" Value="{StaticResource AccentSurfaceBrush}" />
+                                <Setter TargetName="ItemBorder" Property="BorderBrush" Value="#CFE1D7" />
+                                <Setter TargetName="SelectionRail" Property="Background" Value="{StaticResource AccentBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
     </Window.Resources>
 
@@ -80,9 +212,9 @@
         </Grid.ColumnDefinitions>
 
         <Border Grid.Column="0"
-                Margin="18"
-                Padding="18"
-                CornerRadius="26"
+                Margin="20"
+                Padding="20"
+                CornerRadius="20"
                 Background="{StaticResource SidebarBrush}">
             <Grid>
                 <Grid.RowDefinitions>
@@ -165,8 +297,8 @@
                 </StackPanel>
                 <Border x:Name="SidebarFooterCard"
                         Grid.Row="2"
-                        Padding="14"
-                        CornerRadius="18"
+                        Padding="16"
+                        CornerRadius="14"
                         Background="{StaticResource SidebarCardBrush}">
                     <StackPanel>
                         <TextBlock Tag="sidebarWorkspaceLabel"
@@ -196,15 +328,15 @@
         </Border>
 
         <Grid Grid.Column="2"
-              Margin="0,18,18,18">
+              Margin="0,20,20,20">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
             <Border x:Name="TopHeaderCard"
-                    Padding="24"
-                    CornerRadius="28"
+                    Padding="20"
+                    CornerRadius="18"
                     Background="{StaticResource PanelBrush}">
                 <Grid>
                     <Grid.ColumnDefinitions>
@@ -264,7 +396,7 @@
 
             <Grid x:Name="ContentHost"
                   Grid.Row="1"
-                  Margin="0,18,0,0">
+                  Margin="0,24,0,0">
                 <ScrollViewer x:Name="DashboardPage"
                               VerticalScrollBarVisibility="Auto">
                     <StackPanel>
@@ -389,6 +521,7 @@
                                                       Grid.Column="0"
                                                       Height="36"
                                                       Margin="0,0,10,0"
+                                                      Style="{StaticResource InputComboBoxStyle}"
                                                       DisplayMemberPath="DisplayName" />
                                             <Button Grid.Column="1"
                                                     Tag="useSelectedJdkButton"
@@ -411,6 +544,7 @@
                                                       Grid.Column="0"
                                                       Height="36"
                                                       Margin="0,0,10,0"
+                                                      Style="{StaticResource InputComboBoxStyle}"
                                                       DisplayMemberPath="DisplayName" />
                                             <Button Grid.Column="1"
                                                     Tag="useSelectedMavenButton"
@@ -448,8 +582,7 @@
 
                                         <ListBox x:Name="ActivityListBox"
                                                  MinHeight="220"
-                                                 BorderThickness="0"
-                                                 Background="Transparent">
+                                                 Style="{StaticResource CleanListBoxStyle}">
                                             <ListBox.ItemTemplate>
                                                 <DataTemplate>
                                                     <Border Margin="0,0,0,10"
@@ -673,6 +806,7 @@
                                                  Grid.Column="0"
                                                  Height="36"
                                                  Margin="0,0,10,0"
+                                                 Style="{StaticResource InputTextBoxStyle}"
                                                  VerticalContentAlignment="Center" />
                                         <Button Grid.Column="1"
                                                 Tag="browseButton"
@@ -689,36 +823,35 @@
                                     </Grid>
                                     <ListBox x:Name="JdkListBox"
                                              MinHeight="250"
-                                             BorderThickness="0"
-                                             Background="Transparent">
+                                             Style="{StaticResource CleanListBoxStyle}"
+                                             ItemContainerStyle="{StaticResource SelectablePanelListItemStyle}">
                                         <ListBox.ItemTemplate>
                                             <DataTemplate>
-                                                <Border Margin="0,0,0,10"
-                                                        Padding="14"
-                                                        CornerRadius="16"
-                                                        Background="{StaticResource PanelAltBrush}">
-                                                    <StackPanel>
-                                                        <TextBlock FontSize="18"
-                                                                   FontWeight="SemiBold"
-                                                                   Foreground="{StaticResource InkBrush}"
-                                                                   Text="{Binding DisplayName}" />
-                                                        <TextBlock Margin="0,8,0,0"
-                                                                   FontFamily="Consolas"
-                                                                   FontSize="12.5"
-                                                                   Foreground="{StaticResource MutedBrush}"
-                                                                   Text="{Binding HomeDirectory}" />
-                                                        <WrapPanel Margin="0,10,0,0">
+                                                <StackPanel Margin="0,4,12,4">
+                                                    <TextBlock FontSize="20"
+                                                               FontWeight="SemiBold"
+                                                               Foreground="{StaticResource InkBrush}"
+                                                               Text="{Binding DisplayName}" />
+                                                    <TextBlock Margin="0,8,0,0"
+                                                               FontFamily="Consolas"
+                                                               FontSize="12.5"
+                                                               Foreground="{StaticResource MutedBrush}"
+                                                               Text="{Binding HomeDirectory}" />
+                                                    <WrapPanel Margin="0,10,0,0">
+                                                        <Border Padding="8,4"
+                                                                CornerRadius="6"
+                                                                Background="{StaticResource AccentSoftBrush}">
                                                             <TextBlock FontFamily="Consolas"
-                                                                       FontSize="12.5"
+                                                                       FontSize="12"
                                                                        Foreground="{StaticResource AccentBrush}"
                                                                        Text="{Binding Id}" />
-                                                            <TextBlock Margin="10,0,0,0"
-                                                                       FontSize="12.5"
-                                                                       Foreground="{StaticResource MutedBrush}"
-                                                                       Text="{Binding Source}" />
-                                                        </WrapPanel>
-                                                    </StackPanel>
-                                                </Border>
+                                                        </Border>
+                                                        <TextBlock Margin="10,5,0,0"
+                                                                   FontSize="12.5"
+                                                                   Foreground="{StaticResource MutedBrush}"
+                                                                   Text="{Binding Source}" />
+                                                    </WrapPanel>
+                                                </StackPanel>
                                             </DataTemplate>
                                         </ListBox.ItemTemplate>
                                     </ListBox>
@@ -758,6 +891,7 @@
                                                  Grid.Column="0"
                                                  Height="36"
                                                  Margin="0,0,10,0"
+                                                 Style="{StaticResource InputTextBoxStyle}"
                                                  VerticalContentAlignment="Center" />
                                         <Button Grid.Column="1"
                                                 Tag="browseButton"
@@ -774,36 +908,35 @@
                                     </Grid>
                                     <ListBox x:Name="MavenListBox"
                                              MinHeight="250"
-                                             BorderThickness="0"
-                                             Background="Transparent">
+                                             Style="{StaticResource CleanListBoxStyle}"
+                                             ItemContainerStyle="{StaticResource SelectablePanelListItemStyle}">
                                         <ListBox.ItemTemplate>
                                             <DataTemplate>
-                                                <Border Margin="0,0,0,10"
-                                                        Padding="14"
-                                                        CornerRadius="16"
-                                                        Background="#F5EFE8">
-                                                    <StackPanel>
-                                                        <TextBlock FontSize="18"
-                                                                   FontWeight="SemiBold"
-                                                                   Foreground="{StaticResource InkBrush}"
-                                                                   Text="{Binding DisplayName}" />
-                                                        <TextBlock Margin="0,8,0,0"
-                                                                   FontFamily="Consolas"
-                                                                   FontSize="12.5"
-                                                                   Foreground="{StaticResource MutedBrush}"
-                                                                   Text="{Binding HomeDirectory}" />
-                                                        <WrapPanel Margin="0,10,0,0">
+                                                <StackPanel Margin="0,4,12,4">
+                                                    <TextBlock FontSize="20"
+                                                               FontWeight="SemiBold"
+                                                               Foreground="{StaticResource InkBrush}"
+                                                               Text="{Binding DisplayName}" />
+                                                    <TextBlock Margin="0,8,0,0"
+                                                               FontFamily="Consolas"
+                                                               FontSize="12.5"
+                                                               Foreground="{StaticResource MutedBrush}"
+                                                               Text="{Binding HomeDirectory}" />
+                                                    <WrapPanel Margin="0,10,0,0">
+                                                        <Border Padding="8,4"
+                                                                CornerRadius="6"
+                                                                Background="#F6EEE2">
                                                             <TextBlock FontFamily="Consolas"
-                                                                       FontSize="12.5"
+                                                                       FontSize="12"
                                                                        Foreground="{StaticResource WarningBrush}"
                                                                        Text="{Binding Id}" />
-                                                            <TextBlock Margin="10,0,0,0"
-                                                                       FontSize="12.5"
-                                                                       Foreground="{StaticResource MutedBrush}"
-                                                                       Text="{Binding Source}" />
-                                                        </WrapPanel>
-                                                    </StackPanel>
-                                                </Border>
+                                                        </Border>
+                                                        <TextBlock Margin="10,5,0,0"
+                                                                   FontSize="12.5"
+                                                                   Foreground="{StaticResource MutedBrush}"
+                                                                   Text="{Binding Source}" />
+                                                    </WrapPanel>
+                                                </StackPanel>
                                             </DataTemplate>
                                         </ListBox.ItemTemplate>
                                     </ListBox>
@@ -834,7 +967,8 @@
                                         <ComboBox x:Name="RemoteJdkVersionComboBox"
                                                   Grid.Column="0"
                                                   Height="36"
-                                                  Margin="0,0,10,0" />
+                                                  Margin="0,0,10,0"
+                                                  Style="{StaticResource InputComboBoxStyle}" />
                                         <Button Grid.Column="1"
                                                 Tag="installButton"
                                                 Content="Install"
@@ -861,7 +995,8 @@
                                         <ComboBox x:Name="RemoteMavenVersionComboBox"
                                                   Grid.Column="0"
                                                   Height="36"
-                                                  Margin="0,0,10,0" />
+                                                  Margin="0,0,10,0"
+                                                  Style="{StaticResource InputComboBoxStyle}" />
                                         <Button Grid.Column="1"
                                                 Tag="installButton"
                                                 Content="Install"
@@ -1033,8 +1168,9 @@
                                              TextWrapping="Wrap"
                                              VerticalScrollBarVisibility="Auto"
                                              AcceptsReturn="True"
-                                             Background="{StaticResource PanelAltBrush}"
-                                             BorderThickness="0"
+                                             Background="{StaticResource SurfaceBrush}"
+                                             BorderBrush="{StaticResource SoftLineBrush}"
+                                             BorderThickness="1"
                                              Padding="14" />
                                 </StackPanel>
                             </Border>
@@ -1073,8 +1209,9 @@
                                              TextWrapping="Wrap"
                                              VerticalScrollBarVisibility="Auto"
                                              AcceptsReturn="True"
-                                             Background="{StaticResource PanelAltBrush}"
-                                             BorderThickness="0"
+                                             Background="{StaticResource SurfaceBrush}"
+                                             BorderBrush="{StaticResource SoftLineBrush}"
+                                             BorderThickness="1"
                                              Padding="12" />
                                 </StackPanel>
                             </Border>
@@ -1168,6 +1305,7 @@
                                     <ComboBox x:Name="LanguageComboBox"
                                               Margin="0,8,0,0"
                                               Height="34"
+                                              Style="{StaticResource InputComboBoxStyle}"
                                               DisplayMemberPath="DisplayName"
                                               SelectionChanged="OnLanguageSelectionChanged" />
                                     <TextBlock Margin="0,16,0,0"
@@ -1180,6 +1318,21 @@
                                                FontFamily="Consolas"
                                                FontSize="12.5"
                                                TextWrapping="Wrap" />
+                                    <TextBlock Margin="0,16,0,0"
+                                               Tag="settingsShellSyncLabel"
+                                               FontWeight="SemiBold"
+                                               Foreground="{StaticResource InkBrush}"
+                                               Text="Shell Sync" />
+                                    <TextBlock x:Name="ShellSyncStatusTextBlock"
+                                               Margin="0,8,0,0"
+                                               FontSize="13.5"
+                                               FontWeight="SemiBold"
+                                               Foreground="{StaticResource InkBrush}"
+                                               Text="Enabled" />
+                                    <TextBlock x:Name="ShellSyncDetailTextBlock"
+                                               Margin="0,8,0,0"
+                                               Style="{StaticResource BodyTextStyle}"
+                                               Text="cmd and PowerShell will apply the selected toolchain when a new session starts." />
                                     <TextBlock Margin="0,16,0,0"
                                                Tag="settingsVersionLabel"
                                                FontWeight="SemiBold"
