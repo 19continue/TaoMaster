@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\TaoMaster.Core\TaoMaster.Core.csproj" />
+    <Resource Include="..\..\logo.png" Link="Assets\logo.png" />
   </ItemGroup>
 
   <PropertyGroup>

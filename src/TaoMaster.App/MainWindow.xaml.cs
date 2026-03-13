@@ -508,6 +508,26 @@ public partial class MainWindow : Window
             });
     }
 
+    private async void OnRemoveSelectedJdkClicked(object sender, RoutedEventArgs e)
+    {
+        await RemoveSelectedInstallationAsync(ToolchainKind.Jdk, deleteFiles: false);
+    }
+
+    private async void OnUninstallSelectedJdkClicked(object sender, RoutedEventArgs e)
+    {
+        await RemoveSelectedInstallationAsync(ToolchainKind.Jdk, deleteFiles: true);
+    }
+
+    private async void OnRemoveSelectedMavenClicked(object sender, RoutedEventArgs e)
+    {
+        await RemoveSelectedInstallationAsync(ToolchainKind.Maven, deleteFiles: false);
+    }
+
+    private async void OnUninstallSelectedMavenClicked(object sender, RoutedEventArgs e)
+    {
+        await RemoveSelectedInstallationAsync(ToolchainKind.Maven, deleteFiles: true);
+    }
+
     private async void OnInstallJdkClicked(object sender, RoutedEventArgs e)
     {
         await InstallRemoteJdkAsync(switchAfterInstall: false);
@@ -603,6 +623,41 @@ public partial class MainWindow : Window
 
                 var statusKey = switchAfterInstall ? "mavenInstalledAndActivatedStatus" : "mavenInstalledStatus";
                 return _localizer.Format(statusKey, installation.DisplayName);
+            });
+    }
+
+    private async Task RemoveSelectedInstallationAsync(ToolchainKind kind, bool deleteFiles)
+    {
+        var listBox = kind == ToolchainKind.Jdk ? JdkListBox : MavenListBox;
+        if (listBox.SelectedItem is not ManagedInstallation installation)
+        {
+            ShowValidationWarning(kind == ToolchainKind.Jdk ? "validationSelectJdk" : "validationSelectMaven");
+            return;
+        }
+
+        if (!ConfirmRemoval(installation, deleteFiles))
+        {
+            return;
+        }
+
+        var preferredJdkId = kind == ToolchainKind.Jdk ? null : GetSelectedInstallationId(JdkListBox);
+        var preferredMavenId = kind == ToolchainKind.Maven ? null : GetSelectedInstallationId(MavenListBox);
+
+        await ExecuteBusyAsync(
+            GetRemovalBusyKey(kind, deleteFiles),
+            async () =>
+            {
+                var result = await Task.Run(() =>
+                    _catalogService.RemoveInstallation(_state, kind, installation.Id, _layout, deleteFiles));
+
+                await Task.Run(() => _stateStore.Save(_layout, result.State));
+                _state = result.State;
+                await Task.Run(() => _activationService.Apply(result.State));
+
+                InvalidateDoctorOutput();
+                RefreshStateBindings(preferredJdkId, preferredMavenId);
+
+                return _localizer.Format(GetRemovalStatusKey(kind, deleteFiles), result.Installation.DisplayName);
             });
     }
 
@@ -742,6 +797,42 @@ public partial class MainWindow : Window
                 MessageBoxImage.Error);
         }
     }
+
+    private bool ConfirmRemoval(ManagedInstallation installation, bool deleteFiles)
+    {
+        var titleKey = deleteFiles ? "uninstallConfirmTitle" : "removeConfirmTitle";
+        var messageKey = deleteFiles ? "uninstallConfirmMessage" : "removeConfirmMessage";
+        var message = deleteFiles
+            ? _localizer.Format(messageKey, installation.DisplayName, Environment.NewLine, installation.HomeDirectory)
+            : _localizer.Format(messageKey, installation.DisplayName);
+
+        return System.Windows.MessageBox.Show(
+            this,
+            message,
+            _localizer[titleKey],
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning) == MessageBoxResult.Yes;
+    }
+
+    private static string GetRemovalBusyKey(ToolchainKind kind, bool deleteFiles) =>
+        (kind, deleteFiles) switch
+        {
+            (ToolchainKind.Jdk, false) => "busyRemovingJdk",
+            (ToolchainKind.Jdk, true) => "busyUninstallingJdk",
+            (ToolchainKind.Maven, false) => "busyRemovingMaven",
+            (ToolchainKind.Maven, true) => "busyUninstallingMaven",
+            _ => throw new ArgumentOutOfRangeException(nameof(kind))
+        };
+
+    private static string GetRemovalStatusKey(ToolchainKind kind, bool deleteFiles) =>
+        (kind, deleteFiles) switch
+        {
+            (ToolchainKind.Jdk, false) => "jdkRemovedStatus",
+            (ToolchainKind.Jdk, true) => "jdkUninstalledStatus",
+            (ToolchainKind.Maven, false) => "mavenRemovedStatus",
+            (ToolchainKind.Maven, true) => "mavenUninstalledStatus",
+            _ => throw new ArgumentOutOfRangeException(nameof(kind))
+        };
 
     private string BuildDoctorOutput(DoctorReport report)
     {

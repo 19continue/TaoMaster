@@ -75,6 +75,12 @@ try
         case "use":
             RunUse(args);
             break;
+        case "remove":
+            RunRemove(args, deleteFiles: false);
+            break;
+        case "uninstall":
+            RunRemove(args, deleteFiles: true);
+            break;
         case "doctor":
             RunDoctor();
             break;
@@ -212,6 +218,32 @@ void RunUse(string[] cliArgs)
     {
         Console.WriteLine($"MAVEN_HOME : {activationResult.UserMavenHome}");
     }
+}
+
+void RunRemove(string[] cliArgs, bool deleteFiles)
+{
+    if (cliArgs.Length < 3)
+    {
+        throw new ArgumentException(deleteFiles
+            ? "用法：`uninstall jdk <id>` 或 `uninstall maven <id>`。"
+            : "用法：`remove jdk <id>` 或 `remove maven <id>`。");
+    }
+
+    var kind = ParseToolchainKind(cliArgs[1]);
+    var id = string.Join(" ", cliArgs.Skip(2)).Trim();
+    var state = stateStore.EnsureInitialized(layout);
+    var result = catalogService.RemoveInstallation(state, kind, id, layout, deleteFiles);
+
+    stateStore.Save(layout, result.State);
+    activationService.Apply(result.State);
+
+    Console.WriteLine(deleteFiles ? "Uninstall completed." : "Removal completed.");
+    Console.WriteLine($"Kind     : {result.Installation.Kind}");
+    Console.WriteLine($"Name     : {result.Installation.DisplayName}");
+    Console.WriteLine($"ID       : {result.Installation.Id}");
+    Console.WriteLine($"Managed  : {result.Installation.IsManaged}");
+    Console.WriteLine($"Location : {result.Installation.HomeDirectory}");
+    Console.WriteLine($"Files deleted : {result.DeletedFiles}");
 }
 
 void RunDoctor()
@@ -470,6 +502,10 @@ static void PrintHelp(WorkspaceLayout layout)
     Console.WriteLine("  import maven <path>");
     Console.WriteLine("  use jdk <id>");
     Console.WriteLine("  use maven <id>");
+    Console.WriteLine("  remove jdk <id>");
+    Console.WriteLine("  remove maven <id>");
+    Console.WriteLine("  uninstall jdk <id>");
+    Console.WriteLine("  uninstall maven <id>");
     Console.WriteLine("  install jdk [--version 17] [--arch x64] [--switch]");
     Console.WriteLine("  install maven [--version 3.9.14] [--switch]");
     Console.WriteLine("  doctor");

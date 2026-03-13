@@ -1,5 +1,7 @@
 # 道驭（TaoMaster）
 
+![道驭 Logo](logo.png)
+
 `道驭（TaoMaster）` 是一个面向 Windows 10 及以上系统的轻量级 JDK / Maven 联动管理工具，当前版本为 `1.0.0`。
 
 它把这些能力收敛到同一套工具里：
@@ -24,6 +26,8 @@
 - 运行 `doctor` 诊断状态、环境变量、PATH 解析结果与 Maven/JDK 联动
 - 清理用户级 `PATH` 中残留的直接 JDK / Maven 入口
 - 生成机器级 `PATH` 冲突修复脚本，供管理员 PowerShell 执行
+- 从状态中移除外部或受管 JDK / Maven 记录
+- 卸载受管 JDK / Maven 并删除其工作区目录
 - 生成当前终端即时生效的 PowerShell / cmd 激活脚本
 - 记住桌面端上次选择的界面语言
 
@@ -59,6 +63,10 @@ dotnet run --project .\src\TaoMaster.Cli -- import jdk "C:\Program Files\Java\jd
 dotnet run --project .\src\TaoMaster.Cli -- import maven "C:\tools\apache-maven-3.9.14"
 dotnet run --project .\src\TaoMaster.Cli -- use jdk temurin-17.0.18-x64
 dotnet run --project .\src\TaoMaster.Cli -- use maven apache-maven-3.9.14
+dotnet run --project .\src\TaoMaster.Cli -- remove jdk temurin-17.0.18-x64
+dotnet run --project .\src\TaoMaster.Cli -- remove maven apache-maven-3.9.14
+dotnet run --project .\src\TaoMaster.Cli -- uninstall jdk temurin-17.0.18-x64
+dotnet run --project .\src\TaoMaster.Cli -- uninstall maven apache-maven-3.9.14
 dotnet run --project .\src\TaoMaster.Cli -- remote jdks
 dotnet run --project .\src\TaoMaster.Cli -- remote mavens
 dotnet run --project .\src\TaoMaster.Cli -- install jdk --version 17
@@ -85,6 +93,8 @@ dotnet run --project .\src\TaoMaster.App
 - 远程版本刷新
 - 下载并安装
 - 一键切换
+- 从状态中移除选中项
+- 卸载受管选中项
 - Doctor 诊断展示
 - 用户级 `PATH` 冲突清理
 - 机器级 `PATH` 修复脚本复制

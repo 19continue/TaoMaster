@@ -5,6 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
         Title="TaoMaster"
+        Icon="Assets/logo.png"
         Width="1420"
         Height="920"
         MinWidth="1200"
@@ -72,32 +73,45 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
-                <StackPanel>
-                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <TextBlock x:Name="ProductNameTextBlock"
-                                   FontFamily="Bahnschrift SemiCondensed"
-                                   FontSize="40"
-                                   FontWeight="Bold"
-                                   Foreground="#FFF8EF"
-                                   Text="TaoMaster" />
-                        <TextBlock x:Name="ProductVersionTextBlock"
-                                   Margin="12,14,0,0"
-                                   FontFamily="Bahnschrift SemiCondensed"
-                                   FontSize="16"
-                                   FontWeight="SemiBold"
+                <StackPanel Orientation="Horizontal">
+                    <Border Width="84"
+                            Height="84"
+                            Margin="0,0,18,0"
+                            CornerRadius="22"
+                            Background="#274534"
+                            VerticalAlignment="Top">
+                        <Image Source="Assets/logo.png"
+                               Margin="10"
+                               Stretch="Uniform" />
+                    </Border>
+
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock x:Name="ProductNameTextBlock"
+                                       FontFamily="Bahnschrift SemiCondensed"
+                                       FontSize="40"
+                                       FontWeight="Bold"
+                                       Foreground="#FFF8EF"
+                                       Text="TaoMaster" />
+                            <TextBlock x:Name="ProductVersionTextBlock"
+                                       Margin="12,14,0,0"
+                                       FontFamily="Bahnschrift SemiCondensed"
+                                       FontSize="16"
+                                       FontWeight="SemiBold"
+                                       Foreground="#C9D7D0"
+                                       Text="v1.0.0" />
+                        </StackPanel>
+                        <TextBlock Margin="0,8,0,0"
+                                   Tag="headerSubtitle"
+                                   FontSize="15"
                                    Foreground="#C9D7D0"
-                                   Text="v1.0.0" />
+                                   Text="Windows toolchain manager for JDK and Maven" />
+                        <TextBlock Margin="0,12,0,0"
+                                   Tag="headerDescription"
+                                   FontSize="13.5"
+                                   Foreground="#E4ECE7"
+                                   Text="Local discovery, managed installs, global switching, and Maven/JDK consistency checks in one desktop surface." />
                     </StackPanel>
-                    <TextBlock Margin="0,8,0,0"
-                               Tag="headerSubtitle"
-                               FontSize="15"
-                               Foreground="#C9D7D0"
-                               Text="Windows toolchain manager for JDK and Maven" />
-                    <TextBlock Margin="0,12,0,0"
-                               Tag="headerDescription"
-                               FontSize="13.5"
-                               Foreground="#E4ECE7"
-                               Text="Local discovery, managed installs, global switching, and Maven/JDK consistency checks in one desktop surface." />
                 </StackPanel>
 
                 <Border Grid.Column="1"
@@ -210,6 +224,14 @@
                                         Content="Use Selected JDK"
                                         Style="{StaticResource AccentButtonStyle}"
                                         Click="OnUseSelectedJdkClicked" />
+                                <Button Tag="removeSelectedButton"
+                                        Content="Remove Selected"
+                                        Style="{StaticResource SecondaryButtonStyle}"
+                                        Click="OnRemoveSelectedJdkClicked" />
+                                <Button Tag="uninstallSelectedButton"
+                                        Content="Uninstall Selected"
+                                        Style="{StaticResource SecondaryButtonStyle}"
+                                        Click="OnUninstallSelectedJdkClicked" />
                             </WrapPanel>
 
                             <Grid Margin="0,4,0,10">
@@ -286,6 +308,14 @@
                                         Content="Use Selected Maven"
                                         Style="{StaticResource AccentButtonStyle}"
                                         Click="OnUseSelectedMavenClicked" />
+                                <Button Tag="removeSelectedButton"
+                                        Content="Remove Selected"
+                                        Style="{StaticResource SecondaryButtonStyle}"
+                                        Click="OnRemoveSelectedMavenClicked" />
+                                <Button Tag="uninstallSelectedButton"
+                                        Content="Uninstall Selected"
+                                        Style="{StaticResource SecondaryButtonStyle}"
+                                        Click="OnUninstallSelectedMavenClicked" />
                             </WrapPanel>
 
                             <Grid Margin="0,4,0,10">

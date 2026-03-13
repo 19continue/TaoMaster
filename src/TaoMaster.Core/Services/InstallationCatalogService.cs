@@ -53,7 +53,7 @@ public sealed class InstallationCatalogService
             _ => state
         };
 
-        return (updatedState, installation);
+        return (updatedState, ResolveInstallationByHomeDirectory(updatedState, kind, installation.HomeDirectory));
     }
 
     public ManagerState RegisterInstallation(ManagerState state, ManagedInstallation installation) =>
@@ -77,6 +77,59 @@ public sealed class InstallationCatalogService
             },
             _ => state
         };
+
+    public InstallationRemovalResult RemoveInstallation(
+        ManagerState state,
+        ToolchainKind kind,
+        string id,
+        WorkspaceLayout layout,
+        bool deleteFiles)
+    {
+        var installation = FindInstallation(state, kind, id);
+
+        if (deleteFiles)
+        {
+            EnsureManagedInstallationCanBeDeleted(installation, layout);
+
+            if (Directory.Exists(installation.HomeDirectory))
+            {
+                Directory.Delete(installation.HomeDirectory, recursive: true);
+            }
+        }
+
+        var updatedState = kind switch
+        {
+            ToolchainKind.Jdk => state with
+            {
+                Jdks = state.Jdks
+                    .Where(item => !item.Id.Equals(installation.Id, StringComparison.OrdinalIgnoreCase))
+                    .ToList(),
+                ActiveSelection = state.ActiveSelection with
+                {
+                    JdkId = state.ActiveSelection.JdkId != null
+                            && state.ActiveSelection.JdkId.Equals(installation.Id, StringComparison.OrdinalIgnoreCase)
+                        ? null
+                        : state.ActiveSelection.JdkId
+                }
+            },
+            ToolchainKind.Maven => state with
+            {
+                Mavens = state.Mavens
+                    .Where(item => !item.Id.Equals(installation.Id, StringComparison.OrdinalIgnoreCase))
+                    .ToList(),
+                ActiveSelection = state.ActiveSelection with
+                {
+                    MavenId = state.ActiveSelection.MavenId != null
+                              && state.ActiveSelection.MavenId.Equals(installation.Id, StringComparison.OrdinalIgnoreCase)
+                        ? null
+                        : state.ActiveSelection.MavenId
+                }
+            },
+            _ => state
+        };
+
+        return new InstallationRemovalResult(updatedState, installation, deleteFiles);
+    }
 
     private static IReadOnlyList<ManagedInstallation> MergeInstallations(
         IEnumerable<ManagedInstallation> existing,
@@ -155,5 +208,55 @@ public sealed class InstallationCatalogService
             Mavens = mavens,
             ActiveSelection = NormalizeSelection(state.ActiveSelection, state.Jdks, mavens)
         };
+    }
+
+    private static ManagedInstallation FindInstallation(ManagerState state, ToolchainKind kind, string id)
+    {
+        var installation = (kind switch
+        {
+            ToolchainKind.Jdk => state.Jdks,
+            ToolchainKind.Maven => state.Mavens,
+            _ => Array.Empty<ManagedInstallation>()
+        }).FirstOrDefault(item => item.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
+
+        return installation
+               ?? throw new ArgumentException($"No {kind} installation with ID `{id}` was found.", nameof(id));
+    }
+
+    private static ManagedInstallation ResolveInstallationByHomeDirectory(
+        ManagerState state,
+        ToolchainKind kind,
+        string homeDirectory)
+    {
+        var normalizedHomeDirectory = PathUtilities.NormalizePath(homeDirectory);
+        var installation = (kind switch
+        {
+            ToolchainKind.Jdk => state.Jdks,
+            ToolchainKind.Maven => state.Mavens,
+            _ => Array.Empty<ManagedInstallation>()
+        }).FirstOrDefault(item =>
+            PathUtilities.NormalizePath(item.HomeDirectory).Equals(normalizedHomeDirectory, StringComparison.OrdinalIgnoreCase));
+
+        return installation
+               ?? throw new InvalidOperationException($"The imported {kind} installation could not be resolved from state.");
+    }
+
+    private static void EnsureManagedInstallationCanBeDeleted(ManagedInstallation installation, WorkspaceLayout layout)
+    {
+        if (!installation.IsManaged)
+        {
+            throw new InvalidOperationException(
+                $"Installation `{installation.Id}` is not managed by TaoMaster. Use remove to unregister it without deleting files.");
+        }
+
+        var expectedRoot = installation.Kind == ToolchainKind.Jdk
+            ? layout.JdkRoot
+            : layout.MavenRoot;
+
+        if (!PathUtilities.IsDescendantOrSelf(installation.HomeDirectory, expectedRoot))
+        {
+            throw new InvalidOperationException(
+                $"Installation `{installation.Id}` is outside the managed workspace root and cannot be deleted automatically.");
+        }
     }
 }
