@@ -1,0 +1,38 @@
+{
+  "settings": {
+    "installRoot": "%LOCALAPPDATA%\\TaoMaster",
+    "downloadCacheRoot": "%LOCALAPPDATA%\\TaoMaster\\cache",
+    "tempRoot": "%LOCALAPPDATA%\\TaoMaster\\temp",
+    "pathMode": "managed-segments",
+    "preferredJdkProvider": "temurin",
+    "preferredMavenProvider": "apache"
+  },
+  "activeSelection": {
+    "jdkId": "temurin-21.0.6+7-x64",
+    "mavenId": "apache-maven-3.9.11"
+  },
+  "jdks": [
+    {
+      "id": "temurin-21.0.6+7-x64",
+      "displayName": "Temurin 21.0.6+7",
+      "version": "21.0.6+7",
+      "vendor": "Temurin",
+      "architecture": "x64",
+      "homeDirectory": "%LOCALAPPDATA%\\TaoMaster\\jdks\\temurin-21.0.6+7",
+      "isManaged": true,
+      "source": "download"
+    }
+  ],
+  "mavens": [
+    {
+      "id": "apache-maven-3.9.11",
+      "displayName": "Apache Maven 3.9.11",
+      "version": "3.9.11",
+      "vendor": "Apache",
+      "architecture": "noarch",
+      "homeDirectory": "%LOCALAPPDATA%\\TaoMaster\\mavens\\apache-maven-3.9.11",
+      "isManaged": true,
+      "source": "download"
+    }
+  ]
+}

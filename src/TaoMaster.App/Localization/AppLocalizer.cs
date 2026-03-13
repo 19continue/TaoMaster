@@ -1,0 +1,313 @@
+using System.Globalization;
+using TaoMaster.Core;
+using TaoMaster.Core.Models;
+
+namespace TaoMaster.App.Localization;
+
+public enum AppLanguage
+{
+    English,
+    SimplifiedChinese
+}
+
+public sealed record LanguageOption(AppLanguage Language, string DisplayName);
+
+public sealed class AppLocalizer
+{
+    private static readonly IReadOnlyList<LanguageOption> SupportedLanguageList =
+    [
+        new LanguageOption(AppLanguage.English, "English"),
+        new LanguageOption(AppLanguage.SimplifiedChinese, "简体中文")
+    ];
+
+    private static readonly IReadOnlyDictionary<string, string> EnglishStrings =
+        new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["windowTitle"] = ProductInfo.EnglishName,
+            ["headerSubtitle"] = "Windows toolchain manager for JDK and Maven",
+            ["headerDescription"] = "Local discovery, managed installs, global switching, and Maven/JDK consistency checks in one desktop surface.",
+            ["workspaceRootLabel"] = "Workspace Root",
+            ["stateFileLabel"] = "State File",
+            ["languageLabel"] = "Language",
+            ["activeJdkTitle"] = "Active JDK",
+            ["activeMavenTitle"] = "Active Maven",
+            ["javaHomeLabel"] = "JAVA_HOME",
+            ["mavenHomeLabel"] = "MAVEN_HOME / M2_HOME",
+            ["installedJdksTitle"] = "Installed JDKs",
+            ["installedJdksDescription"] = "Sync local installations, import an existing folder, or switch to a selected managed/external JDK.",
+            ["syncLocalButton"] = "Sync Local",
+            ["useSelectedJdkButton"] = "Use Selected JDK",
+            ["browseButton"] = "Browse",
+            ["importJdkButton"] = "Import JDK",
+            ["installedMavensTitle"] = "Installed Mavens",
+            ["installedMavensDescription"] = "Import an existing Maven home or switch to the selected managed/external Maven distribution.",
+            ["useSelectedMavenButton"] = "Use Selected Maven",
+            ["importMavenButton"] = "Import Maven",
+            ["remoteInstallTitle"] = "Install From Remote",
+            ["remoteInstallDescription"] = "Fetch official Temurin JDK and Apache Maven ZIP distributions, verify checksums, extract into the managed workspace, and optionally switch immediately.",
+            ["temurinJdkLabel"] = "Temurin JDK",
+            ["apacheMavenLabel"] = "Apache Maven",
+            ["installButton"] = "Install",
+            ["installUseButton"] = "Install + Use",
+            ["doctorTitle"] = "Doctor",
+            ["doctorDescription"] = "Validate the active selections, user-scoped environment variables, PATH entries, and Maven/JDK runtime consistency.",
+            ["runDoctorButton"] = "Run Doctor",
+            ["refreshRemoteButton"] = "Refresh Remote Versions",
+            ["sessionActivationTitle"] = "Current Session Activation",
+            ["sessionActivationDescription"] = "The desktop app writes user-scoped variables for new shells. Use these scripts when you need the current shell session to update immediately.",
+            ["copyPowerShellButton"] = "Copy PowerShell Script",
+            ["copyCmdButton"] = "Copy cmd Script",
+            ["powerShellPreviewLabel"] = "PowerShell preview",
+            ["statusTitle"] = "Status",
+            ["statusDescription"] = "Latest operation result and current UI state.",
+            ["workingTitle"] = "Working",
+            ["nonePlaceholder"] = "(none)",
+            ["doctorPlaceholder"] = "Run Doctor to display diagnostics.",
+            ["shellPreviewEmpty"] = "No activation script is available yet.",
+            ["shellPreviewUnavailable"] = "Activation preview unavailable: {0}",
+            ["errorTitle"] = "Operation Failed",
+            ["warningTitle"] = "Action Required",
+            ["readyStatus"] = "Ready.",
+            ["languageChangedStatus"] = "Interface language switched to {0}.",
+            ["workspaceLoadedStatus"] = "Workspace loaded. {0} JDK(s), {1} Maven installation(s).",
+            ["remoteVersionsRefreshedStatus"] = "Remote versions refreshed.",
+            ["syncCompletedStatus"] = "Local sync completed. {0} JDK(s), {1} Maven installation(s).",
+            ["jdkImportedStatus"] = "Imported JDK: {0}",
+            ["mavenImportedStatus"] = "Imported Maven: {0}",
+            ["jdkSwitchedStatus"] = "Active JDK switched to {0}.",
+            ["mavenSwitchedStatus"] = "Active Maven switched to {0}.",
+            ["jdkInstalledStatus"] = "Installed JDK: {0}",
+            ["jdkInstalledAndActivatedStatus"] = "Installed and activated JDK: {0}",
+            ["mavenInstalledStatus"] = "Installed Maven: {0}",
+            ["mavenInstalledAndActivatedStatus"] = "Installed and activated Maven: {0}",
+            ["doctorCompletedStatus"] = "Doctor completed. PASS={0}, WARN={1}, FAIL={2}",
+            ["powerShellScriptCopiedStatus"] = "PowerShell activation script copied.",
+            ["cmdScriptCopiedStatus"] = "cmd activation script copied.",
+            ["statusOperationFailed"] = "Operation failed: {0}",
+            ["busyLoadingWorkspace"] = "Loading workspace state and remote versions...",
+            ["busyRefreshingRemoteVersions"] = "Refreshing remote versions...",
+            ["busySyncingLocalInstallations"] = "Syncing local JDK and Maven installations...",
+            ["busyImportingJdk"] = "Importing the selected JDK home...",
+            ["busyImportingMaven"] = "Importing the selected Maven home...",
+            ["busySwitchingJdk"] = "Applying the selected JDK to the user environment...",
+            ["busySwitchingMaven"] = "Applying the selected Maven to the user environment...",
+            ["busyInstallingJdk"] = "Downloading and installing the selected Temurin JDK...",
+            ["busyInstallingMaven"] = "Downloading and installing the selected Maven distribution...",
+            ["busyRunningDoctor"] = "Running environment and Maven/JDK diagnostics...",
+            ["busyCopyingPowerShellScript"] = "Preparing the PowerShell activation script...",
+            ["busyCopyingCmdScript"] = "Preparing the cmd activation script...",
+            ["validationSelectJdk"] = "Select a JDK first.",
+            ["validationSelectMaven"] = "Select a Maven installation first.",
+            ["validationChooseJdkFolder"] = "Choose a valid JDK home directory first.",
+            ["validationChooseMavenFolder"] = "Choose a valid Maven home directory first.",
+            ["validationSelectRemoteJdkVersion"] = "Select a Temurin JDK feature version first.",
+            ["validationSelectRemoteMavenVersion"] = "Select a Maven version first.",
+            ["shellScriptUnavailableWarning"] = "No activation script is available for the current selection yet.",
+            ["browseJdkDescription"] = "Select a JDK home directory",
+            ["browseMavenDescription"] = "Select a Maven home directory",
+            ["doctorHeader"] = "Doctor Report",
+            ["doctorSummary"] = "Summary: PASS={0}, WARN={1}, FAIL={2}",
+            ["detailSelectionLabel"] = "Selection",
+            ["detailIdLabel"] = "ID",
+            ["detailExpectedLabel"] = "Expected",
+            ["detailActualLabel"] = "Actual",
+            ["detailOutputLabel"] = "Output",
+            ["doctor.selected-jdk.pass"] = "Active JDK selection is valid.",
+            ["doctor.selected-jdk.warn"] = "No JDK is selected in state.",
+            ["doctor.selected-jdk.fail"] = "The saved JDK selection points to a missing installation.",
+            ["doctor.selected-maven.pass"] = "Active Maven selection is valid.",
+            ["doctor.selected-maven.warn"] = "No Maven is selected in state.",
+            ["doctor.selected-maven.fail"] = "The saved Maven selection points to a missing installation.",
+            ["doctor.java-home.pass"] = "User JAVA_HOME matches the selected JDK.",
+            ["doctor.java-home.warn"] = "No JDK is selected, so JAVA_HOME is not validated.",
+            ["doctor.java-home.fail"] = "User JAVA_HOME does not match the selected JDK.",
+            ["doctor.maven-home.pass"] = "User MAVEN_HOME matches the selected Maven.",
+            ["doctor.maven-home.warn"] = "No Maven is selected, so MAVEN_HOME is not validated.",
+            ["doctor.maven-home.fail"] = "User MAVEN_HOME does not match the selected Maven.",
+            ["doctor.m2-home.pass"] = "User M2_HOME matches the selected Maven.",
+            ["doctor.m2-home.warn"] = "No Maven is selected, so M2_HOME is not validated.",
+            ["doctor.m2-home.fail"] = "User M2_HOME does not match the selected Maven.",
+            ["doctor.user-path.pass"] = "User PATH contains the managed entries in the expected order.",
+            ["doctor.user-path.warn"] = "User PATH could not be validated.",
+            ["doctor.user-path.fail"] = "User PATH is missing managed entries, contains duplicates, or has an unexpected order.",
+            ["doctor.java-resolve.pass"] = "java.exe resolves to the selected JDK in a new process.",
+            ["doctor.java-resolve.warn"] = "java.exe resolves to a different location in a new process.",
+            ["doctor.java-resolve.fail"] = "java.exe cannot be resolved from a new process PATH.",
+            ["doctor.maven-resolve.pass"] = "mvn.cmd resolves to the selected Maven in a new process.",
+            ["doctor.maven-resolve.warn"] = "mvn.cmd resolves to a different location in a new process.",
+            ["doctor.maven-resolve.fail"] = "mvn.cmd cannot be resolved from a new process PATH.",
+            ["doctor.maven-probe.pass"] = "The selected Maven starts with the selected JDK.",
+            ["doctor.maven-probe.warn"] = "The Maven probe returned warnings.",
+            ["doctor.maven-probe.fail"] = "The selected Maven could not start with the selected JDK."
+        };
+
+    private static readonly IReadOnlyDictionary<string, string> SimplifiedChineseStrings =
+        new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["windowTitle"] = ProductInfo.ChineseName,
+            ["headerSubtitle"] = "面向 JDK 与 Maven 的 Windows 工具链管理器",
+            ["headerDescription"] = "把本机发现、受控安装、全局切换，以及 Maven/JDK 一致性检查放到同一个桌面界面里。",
+            ["workspaceRootLabel"] = "工作区根目录",
+            ["stateFileLabel"] = "状态文件",
+            ["languageLabel"] = "语言",
+            ["activeJdkTitle"] = "当前 JDK",
+            ["activeMavenTitle"] = "当前 Maven",
+            ["javaHomeLabel"] = "JAVA_HOME",
+            ["mavenHomeLabel"] = "MAVEN_HOME / M2_HOME",
+            ["installedJdksTitle"] = "已安装 JDK",
+            ["installedJdksDescription"] = "同步本机安装、导入已有目录，或切换到选中的受管/外部 JDK。",
+            ["syncLocalButton"] = "同步本机",
+            ["useSelectedJdkButton"] = "切换到所选 JDK",
+            ["browseButton"] = "浏览",
+            ["importJdkButton"] = "导入 JDK",
+            ["installedMavensTitle"] = "已安装 Maven",
+            ["installedMavensDescription"] = "导入已有 Maven 根目录，或切换到选中的受管/外部 Maven 发行版。",
+            ["useSelectedMavenButton"] = "切换到所选 Maven",
+            ["importMavenButton"] = "导入 Maven",
+            ["remoteInstallTitle"] = "远程安装",
+            ["remoteInstallDescription"] = "从官方源拉取 Temurin JDK 和 Apache Maven ZIP 包，校验摘要、解压到受管工作区，并可在安装后立即切换。",
+            ["temurinJdkLabel"] = "Temurin JDK",
+            ["apacheMavenLabel"] = "Apache Maven",
+            ["installButton"] = "安装",
+            ["installUseButton"] = "安装并切换",
+            ["doctorTitle"] = "Doctor",
+            ["doctorDescription"] = "校验当前选择、用户级环境变量、PATH 入口，以及 Maven/JDK 的运行时一致性。",
+            ["runDoctorButton"] = "运行 Doctor",
+            ["refreshRemoteButton"] = "刷新远程版本",
+            ["sessionActivationTitle"] = "当前会话激活",
+            ["sessionActivationDescription"] = "桌面端会为新开的终端写入用户级环境变量。若要让当前终端立即生效，可直接使用下面的脚本。",
+            ["copyPowerShellButton"] = "复制 PowerShell 脚本",
+            ["copyCmdButton"] = "复制 cmd 脚本",
+            ["powerShellPreviewLabel"] = "PowerShell 预览",
+            ["statusTitle"] = "状态",
+            ["statusDescription"] = "显示最近一次操作结果和当前界面状态。",
+            ["workingTitle"] = "处理中",
+            ["nonePlaceholder"] = "（未选择）",
+            ["doctorPlaceholder"] = "运行 Doctor 后会在这里显示诊断结果。",
+            ["shellPreviewEmpty"] = "当前还没有可用的激活脚本。",
+            ["shellPreviewUnavailable"] = "激活脚本预览不可用：{0}",
+            ["errorTitle"] = "操作失败",
+            ["warningTitle"] = "需要处理",
+            ["readyStatus"] = "就绪。",
+            ["languageChangedStatus"] = "界面语言已切换为 {0}。",
+            ["workspaceLoadedStatus"] = "工作区已加载，共有 {0} 个 JDK、{1} 个 Maven。",
+            ["remoteVersionsRefreshedStatus"] = "远程版本列表已刷新。",
+            ["syncCompletedStatus"] = "本机同步完成，共 {0} 个 JDK、{1} 个 Maven。",
+            ["jdkImportedStatus"] = "已导入 JDK：{0}",
+            ["mavenImportedStatus"] = "已导入 Maven：{0}",
+            ["jdkSwitchedStatus"] = "当前 JDK 已切换到：{0}",
+            ["mavenSwitchedStatus"] = "当前 Maven 已切换到：{0}",
+            ["jdkInstalledStatus"] = "已安装 JDK：{0}",
+            ["jdkInstalledAndActivatedStatus"] = "已安装并切换到 JDK：{0}",
+            ["mavenInstalledStatus"] = "已安装 Maven：{0}",
+            ["mavenInstalledAndActivatedStatus"] = "已安装并切换到 Maven：{0}",
+            ["doctorCompletedStatus"] = "Doctor 完成。PASS={0}，WARN={1}，FAIL={2}",
+            ["powerShellScriptCopiedStatus"] = "PowerShell 激活脚本已复制。",
+            ["cmdScriptCopiedStatus"] = "cmd 激活脚本已复制。",
+            ["statusOperationFailed"] = "操作失败：{0}",
+            ["busyLoadingWorkspace"] = "正在加载工作区状态和远程版本...",
+            ["busyRefreshingRemoteVersions"] = "正在刷新远程版本列表...",
+            ["busySyncingLocalInstallations"] = "正在同步本机 JDK 和 Maven 安装...",
+            ["busyImportingJdk"] = "正在导入所选 JDK 根目录...",
+            ["busyImportingMaven"] = "正在导入所选 Maven 根目录...",
+            ["busySwitchingJdk"] = "正在把所选 JDK 应用到用户环境变量...",
+            ["busySwitchingMaven"] = "正在把所选 Maven 应用到用户环境变量...",
+            ["busyInstallingJdk"] = "正在下载并安装所选 Temurin JDK...",
+            ["busyInstallingMaven"] = "正在下载并安装所选 Maven 发行版...",
+            ["busyRunningDoctor"] = "正在执行环境变量与 Maven/JDK 诊断...",
+            ["busyCopyingPowerShellScript"] = "正在准备 PowerShell 激活脚本...",
+            ["busyCopyingCmdScript"] = "正在准备 cmd 激活脚本...",
+            ["validationSelectJdk"] = "请先选择一个 JDK。",
+            ["validationSelectMaven"] = "请先选择一个 Maven 安装。",
+            ["validationChooseJdkFolder"] = "请先选择有效的 JDK 根目录。",
+            ["validationChooseMavenFolder"] = "请先选择有效的 Maven 根目录。",
+            ["validationSelectRemoteJdkVersion"] = "请先选择一个 Temurin JDK 特性版本。",
+            ["validationSelectRemoteMavenVersion"] = "请先选择一个 Maven 版本。",
+            ["shellScriptUnavailableWarning"] = "当前选择还没有可用的激活脚本。",
+            ["browseJdkDescription"] = "选择一个 JDK 根目录",
+            ["browseMavenDescription"] = "选择一个 Maven 根目录",
+            ["doctorHeader"] = "Doctor 结果",
+            ["doctorSummary"] = "汇总：PASS={0}，WARN={1}，FAIL={2}",
+            ["detailSelectionLabel"] = "当前选择",
+            ["detailIdLabel"] = "ID",
+            ["detailExpectedLabel"] = "期望",
+            ["detailActualLabel"] = "实际",
+            ["detailOutputLabel"] = "输出",
+            ["doctor.selected-jdk.pass"] = "状态文件中的 JDK 选择有效。",
+            ["doctor.selected-jdk.warn"] = "状态文件中还没有选中的 JDK。",
+            ["doctor.selected-jdk.fail"] = "状态文件中的 JDK 选择已经失效。",
+            ["doctor.selected-maven.pass"] = "状态文件中的 Maven 选择有效。",
+            ["doctor.selected-maven.warn"] = "状态文件中还没有选中的 Maven。",
+            ["doctor.selected-maven.fail"] = "状态文件中的 Maven 选择已经失效。",
+            ["doctor.java-home.pass"] = "用户级 JAVA_HOME 与当前选中的 JDK 一致。",
+            ["doctor.java-home.warn"] = "当前没有选中 JDK，因此未校验 JAVA_HOME。",
+            ["doctor.java-home.fail"] = "用户级 JAVA_HOME 与当前选中的 JDK 不一致。",
+            ["doctor.maven-home.pass"] = "用户级 MAVEN_HOME 与当前选中的 Maven 一致。",
+            ["doctor.maven-home.warn"] = "当前没有选中 Maven，因此未校验 MAVEN_HOME。",
+            ["doctor.maven-home.fail"] = "用户级 MAVEN_HOME 与当前选中的 Maven 不一致。",
+            ["doctor.m2-home.pass"] = "用户级 M2_HOME 与当前选中的 Maven 一致。",
+            ["doctor.m2-home.warn"] = "当前没有选中 Maven，因此未校验 M2_HOME。",
+            ["doctor.m2-home.fail"] = "用户级 M2_HOME 与当前选中的 Maven 不一致。",
+            ["doctor.user-path.pass"] = "用户级 PATH 中的受控入口顺序正确。",
+            ["doctor.user-path.warn"] = "无法完整校验用户级 PATH。",
+            ["doctor.user-path.fail"] = "用户级 PATH 缺少受控入口、存在重复项，或顺序不正确。",
+            ["doctor.java-resolve.pass"] = "新进程里的 java.exe 解析到了当前选中的 JDK。",
+            ["doctor.java-resolve.warn"] = "新进程里的 java.exe 解析到了其他位置。",
+            ["doctor.java-resolve.fail"] = "无法在新进程的 PATH 中解析到 java.exe。",
+            ["doctor.maven-resolve.pass"] = "新进程里的 mvn.cmd 解析到了当前选中的 Maven。",
+            ["doctor.maven-resolve.warn"] = "新进程里的 mvn.cmd 解析到了其他位置。",
+            ["doctor.maven-resolve.fail"] = "无法在新进程的 PATH 中解析到 mvn.cmd。",
+            ["doctor.maven-probe.pass"] = "选中的 Maven 可以使用当前选中的 JDK 正常启动。",
+            ["doctor.maven-probe.warn"] = "Maven 探测返回了告警。",
+            ["doctor.maven-probe.fail"] = "选中的 Maven 无法使用当前选中的 JDK 正常启动。"
+        };
+
+    private readonly IReadOnlyDictionary<string, string> _strings;
+
+    public AppLocalizer(AppLanguage language)
+    {
+        Language = language;
+        _strings = language == AppLanguage.SimplifiedChinese
+            ? SimplifiedChineseStrings
+            : EnglishStrings;
+    }
+
+    public AppLanguage Language { get; }
+
+    public static IReadOnlyList<LanguageOption> SupportedLanguages => SupportedLanguageList;
+
+    public string this[string key] =>
+        _strings.TryGetValue(key, out var value)
+            ? value
+            : key;
+
+    public string Format(string key, params object?[] args) =>
+        string.Format(CultureInfo.CurrentCulture, this[key], args);
+
+    public string GetDoctorMessage(string code, DoctorCheckStatus status)
+    {
+        var key = $"doctor.{code}.{status.ToString().ToLowerInvariant()}";
+        return this[key];
+    }
+
+    public string GetProductDisplayName() =>
+        Language == AppLanguage.SimplifiedChinese
+            ? ProductInfo.ChineseName
+            : ProductInfo.EnglishName;
+
+    public static bool TryParseLanguage(string? value, out AppLanguage language)
+    {
+        if (string.IsNullOrWhiteSpace(value) || value.Equals("auto", StringComparison.OrdinalIgnoreCase))
+        {
+            language = default;
+            return false;
+        }
+
+        return Enum.TryParse(value, ignoreCase: true, out language);
+    }
+
+    public static AppLanguage DetectDefaultLanguage(CultureInfo culture) =>
+        culture.Name.StartsWith("zh", StringComparison.OrdinalIgnoreCase)
+            ? AppLanguage.SimplifiedChinese
+            : AppLanguage.English;
+}

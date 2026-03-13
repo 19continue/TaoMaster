@@ -1,0 +1,543 @@
+<Window x:Class="TaoMaster.App.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        Title="TaoMaster"
+        Width="1420"
+        Height="920"
+        MinWidth="1200"
+        MinHeight="760"
+        Background="#F4EFE6"
+        FontFamily="Microsoft YaHei UI"
+        Loaded="OnLoaded">
+    <Window.Resources>
+        <SolidColorBrush x:Key="PageBrush" Color="#F4EFE6" />
+        <SolidColorBrush x:Key="CardBrush" Color="#FFFDF8" />
+        <SolidColorBrush x:Key="InkBrush" Color="#18231C" />
+        <SolidColorBrush x:Key="MutedBrush" Color="#627067" />
+        <SolidColorBrush x:Key="ForestBrush" Color="#254A39" />
+        <SolidColorBrush x:Key="AccentBrush" Color="#C87443" />
+        <Style x:Key="CardStyle" TargetType="Border">
+            <Setter Property="Background" Value="{StaticResource CardBrush}" />
+            <Setter Property="CornerRadius" Value="20" />
+            <Setter Property="Padding" Value="20" />
+            <Setter Property="Margin" Value="0,0,0,18" />
+        </Style>
+        <Style x:Key="CardTitleStyle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="22" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{StaticResource InkBrush}" />
+        </Style>
+        <Style x:Key="BodyTextStyle" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />
+            <Setter Property="FontSize" Value="13.5" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+        <Style x:Key="ActionButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="{StaticResource ForestBrush}" />
+            <Setter Property="Foreground" Value="#FFFDF8" />
+            <Setter Property="Padding" Value="14,10" />
+            <Setter Property="Margin" Value="0,0,10,10" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+        <Style x:Key="SecondaryButtonStyle" TargetType="Button" BasedOn="{StaticResource ActionButtonStyle}">
+            <Setter Property="Background" Value="#E8EEE8" />
+            <Setter Property="Foreground" Value="{StaticResource InkBrush}" />
+        </Style>
+        <Style x:Key="AccentButtonStyle" TargetType="Button" BasedOn="{StaticResource ActionButtonStyle}">
+            <Setter Property="Background" Value="{StaticResource AccentBrush}" />
+        </Style>
+        <Style x:Key="RoundedInputStyle" TargetType="Control">
+            <Setter Property="Margin" Value="0,0,0,10" />
+        </Style>
+    </Window.Resources>
+
+    <Grid x:Name="RootGrid" Background="{StaticResource PageBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <Border Margin="24,20,24,18"
+                Padding="24"
+                CornerRadius="28"
+                Background="#193125">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock x:Name="ProductNameTextBlock"
+                                   FontFamily="Bahnschrift SemiCondensed"
+                                   FontSize="40"
+                                   FontWeight="Bold"
+                                   Foreground="#FFF8EF"
+                                   Text="TaoMaster" />
+                        <TextBlock x:Name="ProductVersionTextBlock"
+                                   Margin="12,14,0,0"
+                                   FontFamily="Bahnschrift SemiCondensed"
+                                   FontSize="16"
+                                   FontWeight="SemiBold"
+                                   Foreground="#C9D7D0"
+                                   Text="v1.0.0" />
+                    </StackPanel>
+                    <TextBlock Margin="0,8,0,0"
+                               Tag="headerSubtitle"
+                               FontSize="15"
+                               Foreground="#C9D7D0"
+                               Text="Windows toolchain manager for JDK and Maven" />
+                    <TextBlock Margin="0,12,0,0"
+                               Tag="headerDescription"
+                               FontSize="13.5"
+                               Foreground="#E4ECE7"
+                               Text="Local discovery, managed installs, global switching, and Maven/JDK consistency checks in one desktop surface." />
+                </StackPanel>
+
+                <Border Grid.Column="1"
+                        Padding="16"
+                        CornerRadius="18"
+                        Background="#284636"
+                        VerticalAlignment="Top">
+                    <StackPanel Width="320">
+                        <TextBlock FontSize="12"
+                                   Tag="workspaceRootLabel"
+                                   Foreground="#A7C6B5"
+                                   Text="Workspace Root" />
+                        <TextBlock x:Name="WorkspaceRootTextBlock"
+                                   Margin="0,6,0,0"
+                                   FontSize="13.5"
+                                   Foreground="#FFF8EF"
+                                   TextWrapping="Wrap" />
+                        <TextBlock Margin="0,14,0,0"
+                                   FontSize="12"
+                                   Tag="stateFileLabel"
+                                   Foreground="#A7C6B5"
+                                   Text="State File" />
+                        <TextBlock x:Name="StateFileTextBlock"
+                                   Margin="0,6,0,0"
+                                   FontSize="13.5"
+                                   Foreground="#FFF8EF"
+                                   TextWrapping="Wrap" />
+                        <TextBlock Margin="0,14,0,0"
+                                   FontSize="12"
+                                   Tag="languageLabel"
+                                   Foreground="#A7C6B5"
+                                   Text="Language" />
+                        <ComboBox x:Name="LanguageComboBox"
+                                  Margin="0,6,0,0"
+                                  Height="34"
+                                  DisplayMemberPath="DisplayName"
+                                  SelectionChanged="OnLanguageSelectionChanged" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="1" Margin="24,0,24,24">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="1.2*" />
+                <ColumnDefinition Width="1*" />
+            </Grid.ColumnDefinitions>
+
+            <ScrollViewer Margin="0,0,18,0" VerticalScrollBarVisibility="Auto">
+                <StackPanel x:Name="MainContentPanel">
+                    <Border Style="{StaticResource CardStyle}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Margin="0,0,14,0">
+                                <TextBlock Style="{StaticResource CardTitleStyle}" Tag="activeJdkTitle" Text="Active JDK" />
+                                <TextBlock x:Name="ActiveJdkTextBlock"
+                                           Margin="0,12,0,0"
+                                           FontSize="24"
+                                           FontWeight="SemiBold"
+                                           Foreground="{StaticResource InkBrush}"
+                                           Text="(none)" />
+                                <TextBlock Margin="0,10,0,0"
+                                           Tag="javaHomeLabel"
+                                           Style="{StaticResource BodyTextStyle}"
+                                           Text="JAVA_HOME" />
+                                <TextBlock x:Name="JavaHomeTextBlock"
+                                           Margin="0,4,0,0"
+                                           Foreground="{StaticResource ForestBrush}"
+                                           TextWrapping="Wrap" />
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="1" Margin="14,0,0,0">
+                                <TextBlock Style="{StaticResource CardTitleStyle}" Tag="activeMavenTitle" Text="Active Maven" />
+                                <TextBlock x:Name="ActiveMavenTextBlock"
+                                           Margin="0,12,0,0"
+                                           FontSize="24"
+                                           FontWeight="SemiBold"
+                                           Foreground="{StaticResource InkBrush}"
+                                           Text="(none)" />
+                                <TextBlock Margin="0,10,0,0"
+                                           Tag="mavenHomeLabel"
+                                           Style="{StaticResource BodyTextStyle}"
+                                           Text="MAVEN_HOME / M2_HOME" />
+                                <TextBlock x:Name="MavenHomeTextBlock"
+                                           Margin="0,4,0,0"
+                                           Foreground="{StaticResource AccentBrush}"
+                                           TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <Border Style="{StaticResource CardStyle}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource CardTitleStyle}" Tag="installedJdksTitle" Text="Installed JDKs" />
+                            <TextBlock Margin="0,10,0,14"
+                                       Tag="installedJdksDescription"
+                                       Style="{StaticResource BodyTextStyle}"
+                                       Text="Sync local installations, import an existing folder, or switch to a selected managed/external JDK." />
+
+                            <WrapPanel>
+                                <Button Tag="syncLocalButton"
+                                        Content="Sync Local"
+                                        Style="{StaticResource ActionButtonStyle}"
+                                        Click="OnSyncClicked" />
+                                <Button Tag="useSelectedJdkButton"
+                                        Content="Use Selected JDK"
+                                        Style="{StaticResource AccentButtonStyle}"
+                                        Click="OnUseSelectedJdkClicked" />
+                            </WrapPanel>
+
+                            <Grid Margin="0,4,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+
+                                <TextBox x:Name="JdkImportPathTextBox"
+                                         Grid.Column="0"
+                                         Height="36"
+                                         Margin="0,0,10,0"
+                                         VerticalContentAlignment="Center" />
+                                <Button Grid.Column="1"
+                                        Tag="browseButton"
+                                        Content="Browse"
+                                        Width="88"
+                                        Style="{StaticResource SecondaryButtonStyle}"
+                                        Click="OnBrowseJdkImportClicked" />
+                                <Button Grid.Column="2"
+                                        Tag="importJdkButton"
+                                        Content="Import JDK"
+                                        Width="110"
+                                        Style="{StaticResource ActionButtonStyle}"
+                                        Click="OnImportJdkClicked" />
+                            </Grid>
+
+                            <ListBox x:Name="JdkListBox"
+                                     MinHeight="220"
+                                     BorderThickness="0"
+                                     Background="Transparent">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Margin="0,0,0,10"
+                                                Padding="14"
+                                                CornerRadius="16"
+                                                Background="#F4F7F3">
+                                            <StackPanel>
+                                                <TextBlock FontSize="18"
+                                                           FontWeight="SemiBold"
+                                                           Foreground="{StaticResource InkBrush}"
+                                                           Text="{Binding DisplayName}" />
+                                                <TextBlock Margin="0,6,0,0"
+                                                           Style="{StaticResource BodyTextStyle}"
+                                                           Text="{Binding HomeDirectory}" />
+                                                <TextBlock Margin="0,8,0,0"
+                                                           FontFamily="Consolas"
+                                                           FontSize="12.5"
+                                                           Foreground="#315040"
+                                                           Text="{Binding Id}" />
+                                                <TextBlock Margin="0,8,0,0"
+                                                           FontSize="12.5"
+                                                           Foreground="#607066"
+                                                           Text="{Binding Source}" />
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource CardStyle}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource CardTitleStyle}" Tag="installedMavensTitle" Text="Installed Mavens" />
+                            <TextBlock Margin="0,10,0,14"
+                                       Tag="installedMavensDescription"
+                                       Style="{StaticResource BodyTextStyle}"
+                                       Text="Import an existing Maven home or switch to the selected managed/external Maven distribution." />
+
+                            <WrapPanel>
+                                <Button Tag="useSelectedMavenButton"
+                                        Content="Use Selected Maven"
+                                        Style="{StaticResource AccentButtonStyle}"
+                                        Click="OnUseSelectedMavenClicked" />
+                            </WrapPanel>
+
+                            <Grid Margin="0,4,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+
+                                <TextBox x:Name="MavenImportPathTextBox"
+                                         Grid.Column="0"
+                                         Height="36"
+                                         Margin="0,0,10,0"
+                                         VerticalContentAlignment="Center" />
+                                <Button Grid.Column="1"
+                                        Tag="browseButton"
+                                        Content="Browse"
+                                        Width="88"
+                                        Style="{StaticResource SecondaryButtonStyle}"
+                                        Click="OnBrowseMavenImportClicked" />
+                                <Button Grid.Column="2"
+                                        Tag="importMavenButton"
+                                        Content="Import Maven"
+                                        Width="128"
+                                        Style="{StaticResource ActionButtonStyle}"
+                                        Click="OnImportMavenClicked" />
+                            </Grid>
+
+                            <ListBox x:Name="MavenListBox"
+                                     MinHeight="220"
+                                     BorderThickness="0"
+                                     Background="Transparent">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Margin="0,0,0,10"
+                                                Padding="14"
+                                                CornerRadius="16"
+                                                Background="#FFF4EA">
+                                            <StackPanel>
+                                                <TextBlock FontSize="18"
+                                                           FontWeight="SemiBold"
+                                                           Foreground="{StaticResource InkBrush}"
+                                                           Text="{Binding DisplayName}" />
+                                                <TextBlock Margin="0,6,0,0"
+                                                           Style="{StaticResource BodyTextStyle}"
+                                                           Text="{Binding HomeDirectory}" />
+                                                <TextBlock Margin="0,8,0,0"
+                                                           FontFamily="Consolas"
+                                                           FontSize="12.5"
+                                                           Foreground="#8B5D40"
+                                                           Text="{Binding Id}" />
+                                                <TextBlock Margin="0,8,0,0"
+                                                           FontSize="12.5"
+                                                           Foreground="#7A6A60"
+                                                           Text="{Binding Source}" />
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+
+            <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto">
+                <StackPanel>
+                    <Border Style="{StaticResource CardStyle}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource CardTitleStyle}" Tag="remoteInstallTitle" Text="Install From Remote" />
+                            <TextBlock Margin="0,10,0,14"
+                                       Tag="remoteInstallDescription"
+                                       Style="{StaticResource BodyTextStyle}"
+                                       Text="Fetch official Temurin JDK and Apache Maven ZIP distributions, verify checksums, extract into the managed workspace, and optionally switch immediately." />
+
+                            <TextBlock FontWeight="SemiBold"
+                                       Tag="temurinJdkLabel"
+                                       Foreground="{StaticResource InkBrush}"
+                                       Text="Temurin JDK" />
+                            <Grid Margin="0,10,0,16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+
+                                <ComboBox x:Name="RemoteJdkVersionComboBox"
+                                          Grid.Column="0"
+                                          Height="36"
+                                          Margin="0,0,10,0" />
+                                <Button Grid.Column="1"
+                                        Tag="installButton"
+                                        Content="Install"
+                                        Width="96"
+                                        Style="{StaticResource ActionButtonStyle}"
+                                        Click="OnInstallJdkClicked" />
+                                <Button Grid.Column="2"
+                                        Tag="installUseButton"
+                                        Content="Install + Use"
+                                        Width="126"
+                                        Style="{StaticResource AccentButtonStyle}"
+                                        Click="OnInstallAndUseJdkClicked" />
+                            </Grid>
+
+                            <TextBlock FontWeight="SemiBold"
+                                       Tag="apacheMavenLabel"
+                                       Foreground="{StaticResource InkBrush}"
+                                       Text="Apache Maven" />
+                            <Grid Margin="0,10,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+
+                                <ComboBox x:Name="RemoteMavenVersionComboBox"
+                                          Grid.Column="0"
+                                          Height="36"
+                                          Margin="0,0,10,0" />
+                                <Button Grid.Column="1"
+                                        Tag="installButton"
+                                        Content="Install"
+                                        Width="96"
+                                        Style="{StaticResource ActionButtonStyle}"
+                                        Click="OnInstallMavenClicked" />
+                                <Button Grid.Column="2"
+                                        Tag="installUseButton"
+                                        Content="Install + Use"
+                                        Width="126"
+                                        Style="{StaticResource AccentButtonStyle}"
+                                        Click="OnInstallAndUseMavenClicked" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource CardStyle}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource CardTitleStyle}" Tag="doctorTitle" Text="Doctor" />
+                            <TextBlock Margin="0,10,0,14"
+                                       Tag="doctorDescription"
+                                       Style="{StaticResource BodyTextStyle}"
+                                       Text="Validate the active selections, user-scoped environment variables, PATH entries, and Maven/JDK runtime consistency." />
+
+                            <WrapPanel>
+                                <Button Tag="runDoctorButton"
+                                        Content="Run Doctor"
+                                        Style="{StaticResource ActionButtonStyle}"
+                                        Click="OnRunDoctorClicked" />
+                                <Button Tag="refreshRemoteButton"
+                                        Content="Refresh Remote Versions"
+                                        Style="{StaticResource SecondaryButtonStyle}"
+                                        Click="OnRefreshRemoteClicked" />
+                            </WrapPanel>
+
+                            <TextBox x:Name="DoctorOutputTextBox"
+                                     MinHeight="280"
+                                     FontFamily="Consolas"
+                                     FontSize="13"
+                                     IsReadOnly="True"
+                                     TextWrapping="Wrap"
+                                     VerticalScrollBarVisibility="Auto"
+                                     AcceptsReturn="True"
+                                     Background="#13241C"
+                                     Foreground="#EAF4ED"
+                                     BorderThickness="0"
+                                     Padding="14" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource CardStyle}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource CardTitleStyle}" Tag="sessionActivationTitle" Text="Current Session Activation" />
+                            <TextBlock Margin="0,10,0,14"
+                                       Tag="sessionActivationDescription"
+                                       Style="{StaticResource BodyTextStyle}"
+                                       Text="The desktop app writes user-scoped variables for new shells. Use these scripts when you need the current shell session to update immediately." />
+
+                            <WrapPanel>
+                                <Button Tag="copyPowerShellButton"
+                                        Content="Copy PowerShell Script"
+                                        Style="{StaticResource ActionButtonStyle}"
+                                        Click="OnCopyPowerShellScriptClicked" />
+                                <Button Tag="copyCmdButton"
+                                        Content="Copy cmd Script"
+                                        Style="{StaticResource SecondaryButtonStyle}"
+                                        Click="OnCopyCmdScriptClicked" />
+                            </WrapPanel>
+
+                            <TextBlock Margin="0,4,0,8"
+                                       Tag="powerShellPreviewLabel"
+                                       FontWeight="SemiBold"
+                                       Foreground="{StaticResource InkBrush}"
+                                       Text="PowerShell preview" />
+                            <TextBox x:Name="PowerShellScriptTextBox"
+                                     MinHeight="160"
+                                     FontFamily="Consolas"
+                                     FontSize="12.5"
+                                     IsReadOnly="True"
+                                     TextWrapping="Wrap"
+                                     VerticalScrollBarVisibility="Auto"
+                                     AcceptsReturn="True"
+                                     Background="#EEF4EE"
+                                     BorderThickness="0"
+                                     Padding="12" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource CardStyle}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource CardTitleStyle}" Tag="statusTitle" Text="Status" />
+                            <TextBlock Margin="0,10,0,0"
+                                       Tag="statusDescription"
+                                       Style="{StaticResource BodyTextStyle}"
+                                       Text="Latest operation result and current UI state." />
+                            <TextBlock x:Name="StatusTextBlock"
+                                       Margin="0,10,0,0"
+                                       FontSize="14"
+                                       FontWeight="SemiBold"
+                                       Foreground="{StaticResource ForestBrush}"
+                                       Text="Ready." />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+
+            <Border x:Name="BusyOverlay"
+                    Grid.ColumnSpan="2"
+                    Background="#88F4EFE6"
+                    Visibility="Collapsed">
+                <Grid>
+                    <Border Width="320"
+                            Padding="20"
+                            CornerRadius="18"
+                            Background="#1C3127"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center">
+                        <StackPanel>
+                            <TextBlock x:Name="BusyTitleTextBlock"
+                                       Tag="workingTitle"
+                                       FontSize="22"
+                                       FontWeight="SemiBold"
+                                       Foreground="#FFF8EF"
+                                       Text="Working" />
+                            <TextBlock x:Name="BusyTextBlock"
+                                       Margin="0,10,0,0"
+                                       Foreground="#DBE7DF"
+                                       TextWrapping="Wrap"
+                                       Text="Please wait..." />
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </Border>
+        </Grid>
+    </Grid>
+</Window>
