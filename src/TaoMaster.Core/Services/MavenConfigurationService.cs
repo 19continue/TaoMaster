@@ -93,6 +93,95 @@ public sealed class MavenConfigurationService
         return writer.ToString();
     }
 
+    public string ReadToolchainsXml(string toolchainsFilePath)
+    {
+        if (string.IsNullOrWhiteSpace(toolchainsFilePath))
+        {
+            throw new InvalidOperationException("Maven toolchains.xml path cannot be empty.");
+        }
+
+        var normalizedPath = Path.GetFullPath(toolchainsFilePath.Trim());
+        Directory.CreateDirectory(Path.GetDirectoryName(normalizedPath)!);
+
+        var document = File.Exists(normalizedPath)
+            ? XDocument.Load(normalizedPath, LoadOptions.PreserveWhitespace)
+            : CreateToolchainsDocument();
+
+        var normalized = NormalizeToolchainsDocument(document);
+        normalized.Save(normalizedPath);
+        return SaveDocumentToString(normalized);
+    }
+
+    public string NormalizeToolchainsXml(string xmlContent)
+    {
+        var document = string.IsNullOrWhiteSpace(xmlContent)
+            ? CreateToolchainsDocument()
+            : XDocument.Parse(xmlContent, LoadOptions.PreserveWhitespace);
+
+        return SaveDocumentToString(NormalizeToolchainsDocument(document));
+    }
+
+    public string UpsertJdkToolchain(string xmlContent, MavenJdkToolchainConfiguration toolchain)
+    {
+        if (string.IsNullOrWhiteSpace(toolchain.JdkHome))
+        {
+            throw new InvalidOperationException("JDK home cannot be empty.");
+        }
+
+        if (string.IsNullOrWhiteSpace(toolchain.Version))
+        {
+            throw new InvalidOperationException("JDK toolchain version cannot be empty.");
+        }
+
+        var document = string.IsNullOrWhiteSpace(xmlContent)
+            ? CreateToolchainsDocument()
+            : XDocument.Parse(xmlContent, LoadOptions.PreserveWhitespace);
+        document = NormalizeToolchainsDocument(document);
+
+        var root = document.Root ?? throw new InvalidOperationException("The toolchains.xml root element is invalid.");
+        var elementNamespace = GetElementNamespace(root);
+        var normalizedJdkHome = Path.GetFullPath(toolchain.JdkHome.Trim());
+
+        var existingEntries = root
+            .Elements(elementNamespace + "toolchain")
+            .Where(element =>
+                string.Equals(
+                    element.Element(elementNamespace + "type")?.Value?.Trim(),
+                    "jdk",
+                    StringComparison.OrdinalIgnoreCase))
+            .Where(element =>
+                string.Equals(
+                    Path.GetFullPath(element
+                        .Element(elementNamespace + "configuration")
+                        ?.Element(elementNamespace + "jdkHome")
+                        ?.Value
+                        ?.Trim() ?? string.Empty),
+                    normalizedJdkHome,
+                    StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        foreach (var existing in existingEntries)
+        {
+            existing.Remove();
+        }
+
+        root.Add(BuildJdkToolchainElement(toolchain, elementNamespace));
+        return SaveDocumentToString(NormalizeToolchainsDocument(document));
+    }
+
+    public void ApplyToolchainsXml(string toolchainsFilePath, string xmlContent)
+    {
+        if (string.IsNullOrWhiteSpace(toolchainsFilePath))
+        {
+            throw new InvalidOperationException("Maven toolchains.xml path cannot be empty.");
+        }
+
+        var normalizedPath = Path.GetFullPath(toolchainsFilePath.Trim());
+        Directory.CreateDirectory(Path.GetDirectoryName(normalizedPath)!);
+        var normalizedXml = NormalizeToolchainsXml(xmlContent);
+        File.WriteAllText(normalizedPath, normalizedXml, Encoding.UTF8);
+    }
+
     public MavenSettingsSnapshot ReadSettingsSnapshot(string settingsFilePath)
     {
         if (string.IsNullOrWhiteSpace(settingsFilePath))
@@ -245,7 +334,7 @@ public sealed class MavenConfigurationService
         var document = File.Exists(normalizedPath)
             ? XDocument.Load(normalizedPath, LoadOptions.PreserveWhitespace)
             : CreateToolchainsDocument();
-        document.Save(normalizedPath);
+        NormalizeToolchainsDocument(document).Save(normalizedPath);
     }
 
     private static MavenMirrorConfiguration? ReadMirror(XElement element, XNamespace elementNamespace)
@@ -294,6 +383,47 @@ public sealed class MavenConfigurationService
                 new XAttribute(
                     XmlSchemaNamespace + "schemaLocation",
                     "http://maven.apache.org/TOOLCHAINS/1.1.0 https://maven.apache.org/xsd/toolchains-1.1.0.xsd")));
+
+    private static XDocument NormalizeToolchainsDocument(XDocument document)
+    {
+        var root = document.Root;
+        if (root is null)
+        {
+            return CreateToolchainsDocument();
+        }
+
+        if (!root.Name.LocalName.Equals("toolchains", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("The toolchains XML root element must be <toolchains>.");
+        }
+
+        return document;
+    }
+
+    private static XElement BuildJdkToolchainElement(MavenJdkToolchainConfiguration toolchain, XNamespace elementNamespace)
+    {
+        var provides = new XElement(
+            elementNamespace + "provides",
+            new XElement(elementNamespace + "version", toolchain.Version.Trim()));
+
+        if (!string.IsNullOrWhiteSpace(toolchain.Vendor))
+        {
+            provides.Add(new XElement(elementNamespace + "vendor", toolchain.Vendor.Trim()));
+        }
+
+        if (!string.IsNullOrWhiteSpace(toolchain.Architecture))
+        {
+            provides.Add(new XElement(elementNamespace + "arch", toolchain.Architecture.Trim()));
+        }
+
+        return new XElement(
+            elementNamespace + "toolchain",
+            new XElement(elementNamespace + "type", "jdk"),
+            provides,
+            new XElement(
+                elementNamespace + "configuration",
+                new XElement(elementNamespace + "jdkHome", Path.GetFullPath(toolchain.JdkHome.Trim()))));
+    }
 
     private static void ReplaceSingleElement(XElement root, string localName, string value, XNamespace elementNamespace)
     {
@@ -401,6 +531,13 @@ public sealed class MavenConfigurationService
         root.Name.Namespace == XNamespace.None
             ? XNamespace.None
             : root.Name.Namespace;
+
+    private static string SaveDocumentToString(XDocument document)
+    {
+        using var writer = new Utf8StringWriter();
+        document.Save(writer);
+        return writer.ToString();
+    }
 
     private sealed class Utf8StringWriter : StringWriter
     {

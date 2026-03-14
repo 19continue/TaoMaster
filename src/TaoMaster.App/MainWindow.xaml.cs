@@ -76,7 +76,9 @@ public partial class MainWindow : Window
     private bool _suppressConfigurationScopeSelectionChanged;
     private bool _suppressDownloadSourceSelectionChanged;
     private bool _suppressMirrorEditorTextChanged;
+    private bool _suppressToolchainsEditorTextChanged;
     private bool _mavenMirrorsEditorDirty;
+    private bool _toolchainsEditorDirty;
     private AppSection _currentSection = AppSection.Dashboard;
 
     public MainWindow()
@@ -296,6 +298,7 @@ public partial class MainWindow : Window
         SaveManagedRootsButton.Content = Localize("Save and Migrate Install Directories", "保存并迁移安装目录");
         MavenConfigNavButton.Content = Localize("Maven Config", "Maven 配置");
         LoadMavenSettingsButton.Content = Localize("Read Mirrors From Config File", "读取配置文件镜像");
+        LoadMavenToolchainsButton.Content = Localize("Read Toolchains From Config File", "读取配置文件中的 toolchains");
         ImportMirrorXmlButton.Content = Localize("Import Mirror XML", "导入镜像 XML");
         MavenRepositoryMigrationCheckBox.Content = Localize(
             "Move existing local repository contents when the repository directory changes.",
@@ -313,6 +316,12 @@ public partial class MainWindow : Window
         MavenMirrorsXmlEditorHintTextBlock.Text = Localize(
             "Edit the <mirrors> XML directly. TaoMaster only updates the mirrors node and localRepository value in settings.xml.",
             "直接编辑 <mirrors> XML。TaoMaster 只会更新 settings.xml 中的 mirrors 节点和 localRepository 值。");
+        ToolchainsJdkSelectorLabelTextBlock.Text = Localize("Insert Installed JDK", "插入已安装的 JDK");
+        InsertSelectedJdkToolchainButton.Content = Localize("Insert Selected JDK", "插入所选 JDK");
+        ToolchainsXmlEditorLabelTextBlock.Text = Localize("Toolchains XML", "Toolchains XML");
+        ToolchainsXmlEditorHintTextBlock.Text = Localize(
+            "Edit the full toolchains.xml here. TaoMaster can insert installed JDK entries and keeps the file formatted when saving.",
+            "在这里编辑完整的 toolchains.xml。TaoMaster 可以插入已安装的 JDK 条目，并在保存时整理文件格式。");
         MavenConfigTargetTitleTextBlock.Text = Localize("Current Target", "当前目标");
         MavenConfigTargetDescriptionTextBlock.Text = Localize(
             "Global scope writes to the selected Maven installation. User scope writes to the current user's .m2 directory.",
@@ -477,11 +486,13 @@ public partial class MainWindow : Window
         MavenListBox.ItemsSource = _state.Mavens.ToList();
         DashboardJdkComboBox.ItemsSource = _state.Jdks.ToList();
         DashboardMavenComboBox.ItemsSource = _state.Mavens.ToList();
+        ToolchainsJdkComboBox.ItemsSource = _state.Jdks.ToList();
 
         SelectInstallation(JdkListBox, _state.Jdks, preferredJdkId ?? _state.ActiveSelection.JdkId);
         SelectInstallation(MavenListBox, _state.Mavens, preferredMavenId ?? _state.ActiveSelection.MavenId);
         SelectInstallationInComboBox(DashboardJdkComboBox, _state.Jdks, preferredJdkId ?? _state.ActiveSelection.JdkId);
         SelectInstallationInComboBox(DashboardMavenComboBox, _state.Mavens, preferredMavenId ?? _state.ActiveSelection.MavenId);
+        SelectInstallationInComboBox(ToolchainsJdkComboBox, _state.Jdks, preferredJdkId ?? _state.ActiveSelection.JdkId);
 
         PowerShellScriptTextBox.Text = BuildShellPreviewText("powershell");
         EnvironmentSnapshotTextBox.Text = BuildEnvironmentSnapshot(selection);
@@ -639,6 +650,7 @@ public partial class MainWindow : Window
                     effectiveMaven.HomeDirectory);
 
         RefreshMavenMirrorsXmlEditor(forceEditorRefresh);
+        RefreshToolchainsXmlEditor(forceEditorRefresh);
     }
 
     private void RefreshMavenMirrorsXmlEditor(bool force = false)
@@ -659,12 +671,88 @@ public partial class MainWindow : Window
         _mavenMirrorsEditorDirty = false;
     }
 
+    private void RefreshToolchainsXmlEditor(bool force = false)
+    {
+        if (!force && _toolchainsEditorDirty)
+        {
+            return;
+        }
+
+        var toolchainsFilePath = ResolveConfiguredMavenToolchainsFilePath();
+        var xmlContent = string.IsNullOrWhiteSpace(toolchainsFilePath)
+            ? _mavenConfigurationService.NormalizeToolchainsXml(string.Empty)
+            : _mavenConfigurationService.ReadToolchainsXml(toolchainsFilePath);
+
+        SetToolchainsEditorText(xmlContent);
+    }
+
+    private void SetToolchainsEditorText(string xmlContent)
+    {
+        _suppressToolchainsEditorTextChanged = true;
+        ToolchainsXmlEditorTextBox.Text = xmlContent;
+        _suppressToolchainsEditorTextChanged = false;
+        _toolchainsEditorDirty = false;
+    }
+
     private IReadOnlyList<MavenMirrorConfiguration> ReadMirrorsFromEditor()
     {
         var xmlContent = MavenMirrorsXmlEditorTextBox.Text.Trim();
         return string.IsNullOrWhiteSpace(xmlContent)
             ? Array.Empty<MavenMirrorConfiguration>()
             : _mavenConfigurationService.ImportMirrorsFromXmlContent(xmlContent);
+    }
+
+    private string ResolveConfiguredMavenToolchainsFilePath()
+    {
+        var scope = _state.Settings.MavenConfigurationScope;
+        if (scope == MavenConfigurationScope.User)
+        {
+            return _state.Settings.MavenToolchainsFilePath;
+        }
+
+        return TryResolveMavenConfigurationPaths(scope, out _, out var toolchainsFilePath)
+            ? toolchainsFilePath
+            : string.Empty;
+    }
+
+    private MavenJdkToolchainConfiguration BuildJdkToolchainConfiguration(ManagedInstallation installation)
+    {
+        var version = NormalizeToolchainVersion(installation.Version);
+        var vendor = string.IsNullOrWhiteSpace(installation.Vendor)
+            ? null
+            : installation.Vendor.Trim().ToLowerInvariant();
+        var architecture = string.IsNullOrWhiteSpace(installation.Architecture)
+            ? null
+            : installation.Architecture.Trim().ToLowerInvariant();
+
+        return new MavenJdkToolchainConfiguration(
+            JdkHome: installation.HomeDirectory,
+            Version: version,
+            Vendor: vendor,
+            Architecture: architecture);
+    }
+
+    private static string NormalizeToolchainVersion(string version)
+    {
+        if (string.IsNullOrWhiteSpace(version))
+        {
+            return "17";
+        }
+
+        var normalized = version.Trim();
+        if (normalized.StartsWith("1.8", StringComparison.OrdinalIgnoreCase)
+            || normalized.StartsWith("8.", StringComparison.OrdinalIgnoreCase)
+            || normalized.StartsWith("8u", StringComparison.OrdinalIgnoreCase))
+        {
+            return "8";
+        }
+
+        var featureText = normalized.Split(['.', '+', '-'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .FirstOrDefault();
+
+        return int.TryParse(featureText, out var featureVersion) && featureVersion > 0
+            ? featureVersion.ToString(CultureInfo.InvariantCulture)
+            : normalized;
     }
 
     private void PopulateMavenMirrorEditor(MavenMirrorConfiguration? mirror)
@@ -1621,6 +1709,7 @@ public partial class MainWindow : Window
         }
     }
 
+    #pragma warning disable CS0162
     private async void OnLoadMavenSettingsClicked(object sender, RoutedEventArgs e)
     {
         await ExecuteBusyWithMessageAsync(
@@ -1644,6 +1733,19 @@ public partial class MainWindow : Window
                     settingsFilePathOverride: MavenSettingsFilePathTextBox.Text.Trim()));
                 RefreshStateBindings(GetSelectedInstallationId(JdkListBox), GetSelectedInstallationId(MavenListBox));
                 return Localize("Loaded mirrors from the config file.", "已读取配置文件中的镜像。");
+            });
+    }
+
+    private async void OnLoadMavenToolchainsClicked(object sender, RoutedEventArgs e)
+    {
+        await ExecuteBusyWithMessageAsync(
+            Localize("Loading Maven toolchains...", "正在读取 Maven toolchains 配置..."),
+            async () =>
+            {
+                var xmlContent = await Task.Run(() =>
+                    _mavenConfigurationService.ReadToolchainsXml(MavenToolchainsFilePathTextBox.Text.Trim()));
+                SetToolchainsEditorText(xmlContent);
+                return Localize("Loaded toolchains from the configuration file.", "已从配置文件读取 toolchains。");
             });
     }
 
@@ -1673,6 +1775,31 @@ public partial class MainWindow : Window
         }
 
         AddMirrorToState(mirror with { IsBuiltIn = true });
+    }
+
+    private void OnInsertSelectedJdkToolchainClicked(object sender, RoutedEventArgs e)
+    {
+        if (ToolchainsJdkComboBox.SelectedItem is not ManagedInstallation installation)
+        {
+            ShowValidationMessage(Localize("Select a JDK first.", "请先选择一个 JDK。"));
+            return;
+        }
+
+        try
+        {
+            var toolchain = BuildJdkToolchainConfiguration(installation);
+            var updatedXml = _mavenConfigurationService.UpsertJdkToolchain(ToolchainsXmlEditorTextBox.Text, toolchain);
+            SetToolchainsEditorText(updatedXml);
+            _toolchainsEditorDirty = true;
+            SetStatus(FormatLocalized(
+                "Inserted JDK toolchain: {0}",
+                "已插入 JDK toolchain：{0}",
+                installation.DisplayName));
+        }
+        catch (Exception ex)
+        {
+            ShowValidationMessage(ex.Message);
+        }
     }
 
     private void OnAddCustomMirrorClicked(object sender, RoutedEventArgs e)
@@ -2961,10 +3088,12 @@ public partial class MainWindow : Window
     private async Task ApplyMavenSettingsAsync(bool migrateRepository)
     {
         IReadOnlyList<MavenMirrorConfiguration> parsedMirrors;
+        string normalizedToolchainsXml;
 
         try
         {
             parsedMirrors = ReadMirrorsFromEditor();
+            normalizedToolchainsXml = _mavenConfigurationService.NormalizeToolchainsXml(ToolchainsXmlEditorTextBox.Text);
         }
         catch (Exception ex)
         {
@@ -3011,7 +3140,7 @@ public partial class MainWindow : Window
                     parsedMirrors,
                     _state.Settings.MavenLocalRepositoryPath,
                     migrateRepository));
-                await Task.Run(() => _mavenConfigurationService.EnsureEditableToolchainsFile(resolvedToolchainsFilePath));
+                await Task.Run(() => _mavenConfigurationService.ApplyToolchainsXml(resolvedToolchainsFilePath, normalizedToolchainsXml));
 
                 _state = _state with
                 {
@@ -3031,6 +3160,7 @@ public partial class MainWindow : Window
 
                 await Task.Run(() => _stateStore.Save(_layout, _state));
                 RefreshMavenMirrorsXmlEditor(force: true);
+                SetToolchainsEditorText(normalizedToolchainsXml);
                 RefreshStateBindings(GetSelectedInstallationId(JdkListBox), GetSelectedInstallationId(MavenListBox));
 
                 return result.RepositoryMigrated
@@ -3088,6 +3218,7 @@ public partial class MainWindow : Window
             },
             ShowSuccessDialog);
     }
+    #pragma warning restore CS0162
 
     private void OnCopyPowerShellScriptClicked(object sender, RoutedEventArgs e)
     {
@@ -3434,6 +3565,16 @@ public partial class MainWindow : Window
         }
 
         _mavenMirrorsEditorDirty = true;
+    }
+
+    private void OnToolchainsXmlEditorTextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
+    {
+        if (_suppressToolchainsEditorTextChanged)
+        {
+            return;
+        }
+
+        _toolchainsEditorDirty = true;
     }
 
     private void OnComboBoxPreviewMouseWheel(object sender, MouseWheelEventArgs e)
