@@ -149,7 +149,11 @@ public partial class MainWindow : Window
             async () =>
             {
                 _shellIntegrationStatus = await Task.Run(() => _shellIntegrationService.EnsureEnabled(_layout, _state));
-                await Task.Run(() => SyncMavenSettingsFromFile(persistState: true));
+                if (TryGetMavenConfigurationPaths(out var scope, out var settingsFilePath, out var toolchainsFilePath, showValidation: false))
+                {
+                    ReloadMavenConfigurationFiles(scope, settingsFilePath, toolchainsFilePath, persistState: true);
+                }
+
                 RefreshStateBindings();
 
                 await RefreshRemoteVersionsCoreAsync();
@@ -855,29 +859,100 @@ public partial class MainWindow : Window
     private WorkspaceLayout GetManagedLayout() =>
         _managedInstallLayoutService.Resolve(_layout, _state.Settings);
 
-    private void SyncMavenSettingsFromFile(bool persistState, string? settingsFilePathOverride = null)
+    private bool TryGetMavenConfigurationPaths(
+        out MavenConfigurationScope scope,
+        out string settingsFilePath,
+        out string toolchainsFilePath,
+        bool showValidation = true)
     {
-        var selectedPath = string.IsNullOrWhiteSpace(settingsFilePathOverride)
-            ? ResolveConfiguredMavenSettingsFilePath()
-            : settingsFilePathOverride.Trim();
+        scope = (MavenConfigurationScopeComboBox.SelectedItem as ConfigurationScopeOption)?.Scope
+                ?? _state.Settings.MavenConfigurationScope;
 
-        if (string.IsNullOrWhiteSpace(selectedPath))
+        if (!TryResolveMavenConfigurationPaths(scope, out var effectiveSettingsPath, out var effectiveToolchainsPath))
         {
-            return;
+            settingsFilePath = string.Empty;
+            toolchainsFilePath = string.Empty;
+
+            if (showValidation)
+            {
+                ShowValidationMessage(Localize(
+                    "Select or activate a Maven installation before using global configuration files.",
+                    "使用全局配置文件前，请先选择或激活一个 Maven 安装。"));
+            }
+
+            return false;
         }
 
-        var snapshot = _mavenConfigurationService.ReadSettingsSnapshot(selectedPath);
+        settingsFilePath = scope == MavenConfigurationScope.User
+            ? MavenSettingsFilePathTextBox.Text.Trim()
+            : effectiveSettingsPath;
+        toolchainsFilePath = scope == MavenConfigurationScope.User
+            ? MavenToolchainsFilePathTextBox.Text.Trim()
+            : effectiveToolchainsPath;
+
+        return true;
+    }
+
+    private void LoadMavenSettingsFromPath(MavenConfigurationScope scope, string settingsFilePath)
+    {
+        var snapshot = _mavenConfigurationService.ReadSettingsSnapshot(settingsFilePath);
         _state = _state with
         {
             Settings = _state.Settings with
             {
-                MavenSettingsFilePath = _state.Settings.MavenConfigurationScope == MavenConfigurationScope.User
+                MavenConfigurationScope = scope,
+                MavenSettingsFilePath = scope == MavenConfigurationScope.User
                     ? snapshot.SettingsFilePath
                     : _state.Settings.MavenSettingsFilePath,
                 MavenLocalRepositoryPath = snapshot.LocalRepositoryPath,
                 MavenMirrors = snapshot.Mirrors
             }
         };
+
+        SetMavenMirrorsEditorText(_mavenConfigurationService.BuildMirrorsXml(snapshot.Mirrors));
+    }
+
+    private void LoadMavenToolchainsFromPath(MavenConfigurationScope scope, string toolchainsFilePath)
+    {
+        var xmlContent = _mavenConfigurationService.ReadToolchainsXml(toolchainsFilePath);
+        _state = _state with
+        {
+            Settings = _state.Settings with
+            {
+                MavenConfigurationScope = scope,
+                MavenToolchainsFilePath = scope == MavenConfigurationScope.User
+                    ? Path.GetFullPath(toolchainsFilePath)
+                    : _state.Settings.MavenToolchainsFilePath
+            }
+        };
+
+        SetToolchainsEditorText(xmlContent);
+    }
+
+    private void ReloadMavenConfigurationFiles(MavenConfigurationScope scope, string settingsFilePath, string toolchainsFilePath, bool persistState)
+    {
+        LoadMavenSettingsFromPath(scope, settingsFilePath);
+        LoadMavenToolchainsFromPath(scope, toolchainsFilePath);
+
+        if (persistState)
+        {
+            _stateStore.Save(_layout, _state);
+        }
+    }
+
+    private void SyncMavenSettingsFromFile(bool persistState, string? settingsFilePathOverride = null)
+    {
+        var settingsFilePath = string.IsNullOrWhiteSpace(settingsFilePathOverride)
+            ? ResolveConfiguredMavenSettingsFilePath()
+            : settingsFilePathOverride.Trim();
+
+        if (string.IsNullOrWhiteSpace(settingsFilePath))
+        {
+            return;
+        }
+
+        var scope = _state.Settings.MavenConfigurationScope;
+        LoadMavenSettingsFromPath(scope, settingsFilePath);
 
         if (persistState)
         {
@@ -1739,7 +1814,20 @@ public partial class MainWindow : Window
         if (dialog.ShowDialog(this) == true)
         {
             MavenSettingsFilePathTextBox.Text = dialog.FileName;
+            OnLoadMavenSettingsClicked(sender, e);
         }
+    }
+
+    private void OnMavenSettingsFilePathLostFocus(object sender, RoutedEventArgs e)
+    {
+        if (!_hasLoaded
+            || _state.Settings.MavenConfigurationScope != MavenConfigurationScope.User
+            || PathsEqual(MavenSettingsFilePathTextBox.Text, _state.Settings.MavenSettingsFilePath))
+        {
+            return;
+        }
+
+        OnLoadMavenSettingsClicked(sender, e);
     }
 
     private void OnBrowseMavenLocalRepositoryClicked(object sender, RoutedEventArgs e)
@@ -1792,21 +1880,24 @@ public partial class MainWindow : Window
     }
 
     #pragma warning disable CS0162
-    private async void OnLoadMavenSettingsClicked(object sender, RoutedEventArgs e)
+    private void OnLoadMavenSettingsClicked(object sender, RoutedEventArgs e)
     {
-        await ExecuteBusyWithMessageAsync(
+        if (!TryGetMavenConfigurationPaths(out var scope, out var settingsFilePath, out _, showValidation: true))
+        {
+            return;
+        }
+        _ = ExecuteBusyWithMessageAsync(
             Localize("Loading Maven configuration...", "正在读取 Maven 配置..."),
-            async () =>
+            () =>
             {
-                var settingsFilePath = MavenSettingsFilePathTextBox.Text.Trim();
-                await Task.Run(() => SyncMavenSettingsFromFile(persistState: true, settingsFilePathOverride: settingsFilePath));
-                RefreshMavenMirrorsXmlEditor(force: true);
+                LoadMavenSettingsFromPath(scope, settingsFilePath);
+                _stateStore.Save(_layout, _state);
                 RefreshStateBindings(GetSelectedInstallationId(JdkListBox), GetSelectedInstallationId(MavenListBox));
-                return Localize("Loaded mirrors from the configuration file.", "已从配置文件读取镜像。");
+                return Task.FromResult<string?>(Localize("Loaded mirrors from the configuration file.", "已从配置文件读取镜像。"));
             });
         return;
 
-        await ExecuteBusyWithMessageAsync(
+        _ = ExecuteBusyWithMessageAsync(
             Localize("Loading Maven settings...", "正在读取 Maven 配置..."),
             async () =>
             {
@@ -1818,16 +1909,21 @@ public partial class MainWindow : Window
             });
     }
 
-    private async void OnLoadMavenToolchainsClicked(object sender, RoutedEventArgs e)
+    private void OnLoadMavenToolchainsClicked(object sender, RoutedEventArgs e)
     {
-        await ExecuteBusyWithMessageAsync(
+        if (!TryGetMavenConfigurationPaths(out var scope, out _, out var toolchainsFilePath, showValidation: true))
+        {
+            return;
+        }
+
+        _ = ExecuteBusyWithMessageAsync(
             Localize("Loading Maven toolchains...", "正在读取 Maven toolchains 配置..."),
-            async () =>
+            () =>
             {
-                var xmlContent = await Task.Run(() =>
-                    _mavenConfigurationService.ReadToolchainsXml(MavenToolchainsFilePathTextBox.Text.Trim()));
-                SetToolchainsEditorText(xmlContent);
-                return Localize("Loaded toolchains from the configuration file.", "已从配置文件读取 toolchains。");
+                LoadMavenToolchainsFromPath(scope, toolchainsFilePath);
+                _stateStore.Save(_layout, _state);
+                RefreshStateBindings(GetSelectedInstallationId(JdkListBox), GetSelectedInstallationId(MavenListBox));
+                return Task.FromResult<string?>(Localize("Loaded toolchains from the configuration file.", "已从配置文件读取 toolchains。"));
             });
     }
 
@@ -1971,7 +2067,6 @@ public partial class MainWindow : Window
             .Concat([mirror])
             .OrderBy(existing => existing.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
-
         _state = _state with
         {
             Settings = _state.Settings with
@@ -2414,8 +2509,20 @@ public partial class MainWindow : Window
             }
         };
 
-        _stateStore.Save(_layout, _state);
-        RefreshMavenConfigurationBindings(forceEditorRefresh: false);
+        ReloadMavenConfigurationFiles(
+            selectedOption.Scope,
+            selectedOption.Scope == MavenConfigurationScope.User
+                ? _state.Settings.MavenSettingsFilePath
+                : _mavenConfigurationService.ResolveSettingsFilePath(
+                    selectedOption.Scope,
+                    ResolveMavenInstallationForConfiguration()?.HomeDirectory),
+            selectedOption.Scope == MavenConfigurationScope.User
+                ? _state.Settings.MavenToolchainsFilePath
+                : _mavenConfigurationService.ResolveToolchainsFilePath(
+                    selectedOption.Scope,
+                    ResolveMavenInstallationForConfiguration()?.HomeDirectory),
+            persistState: true);
+        RefreshStateBindings(GetSelectedInstallationId(JdkListBox), GetSelectedInstallationId(MavenListBox));
         SetStatus(FormatLocalized(
             "Maven configuration scope set to: {0}",
             "Maven 配置作用域已切换为：{0}",
@@ -2539,7 +2646,20 @@ public partial class MainWindow : Window
         if (dialog.ShowDialog(this) == true)
         {
             MavenToolchainsFilePathTextBox.Text = dialog.FileName;
+            OnLoadMavenToolchainsClicked(sender, e);
         }
+    }
+
+    private void OnMavenToolchainsFilePathLostFocus(object sender, RoutedEventArgs e)
+    {
+        if (!_hasLoaded
+            || _state.Settings.MavenConfigurationScope != MavenConfigurationScope.User
+            || PathsEqual(MavenToolchainsFilePathTextBox.Text, _state.Settings.MavenToolchainsFilePath))
+        {
+            return;
+        }
+
+        OnLoadMavenToolchainsClicked(sender, e);
     }
 
     private void OnOpenMavenSettingsFileClicked(object sender, RoutedEventArgs e)

@@ -1641,17 +1641,6 @@
                                               DisplayMemberPath="DisplayName"
                                               Style="{StaticResource InputComboBoxStyle}"
                                               SelectionChanged="OnMavenConfigurationScopeSelectionChanged" />
-                                    <WrapPanel Margin="0,0,0,16">
-                                        <Button x:Name="LegacyLoadMavenSettingsButton"
-                                                Content="Load Mirrors From Config File"
-                                                Style="{StaticResource SecondaryButtonStyle}"
-                                                Click="OnLoadMavenSettingsClicked" />
-                                        <Button x:Name="LegacyImportMirrorXmlButton"
-                                                Content="Import Mirror XML"
-                                                Style="{StaticResource SecondaryButtonStyle}"
-                                                Click="OnImportMirrorXmlClicked" />
-                                    </WrapPanel>
-
                                     <TextBlock Tag="settingsMavenSettingsPathLabel"
                                                FontWeight="SemiBold"
                                                Foreground="{StaticResource InkBrush}"
@@ -1908,17 +1897,6 @@
                                                Style="{StaticResource BodyTextStyle}"
                                                Text="User scope writes to ~/.m2. Global scope writes to the selected Maven installation under conf." />
 
-                                    <WrapPanel Margin="0,0,0,16">
-                                        <Button x:Name="LoadMavenSettingsButton"
-                                                Content="Read Mirrors From Config File"
-                                                Style="{StaticResource SecondaryButtonStyle}"
-                                                Click="OnLoadMavenSettingsClicked" />
-                                        <Button x:Name="ImportMirrorXmlButton"
-                                                Content="Import Mirror XML"
-                                                Style="{StaticResource SecondaryButtonStyle}"
-                                                Click="OnImportMirrorXmlClicked" />
-                                    </WrapPanel>
-
                                     <TextBlock Tag="settingsMavenSettingsPathLabel"
                                                FontWeight="SemiBold"
                                                Foreground="{StaticResource InkBrush}"
@@ -1933,6 +1911,7 @@
                                                  Grid.Column="0"
                                                  Height="36"
                                                  Margin="0,0,10,0"
+                                                 LostFocus="OnMavenSettingsFilePathLostFocus"
                                                  Style="{StaticResource InputTextBoxStyle}"
                                                  VerticalContentAlignment="Center" />
                                         <Button x:Name="BrowseMavenSettingsFileButton"
@@ -1949,6 +1928,12 @@
                                                 Style="{StaticResource SecondaryButtonStyle}"
                                                 Click="OnOpenMavenSettingsFileClicked" />
                                     </Grid>
+                                    <WrapPanel Margin="0,12,0,16">
+                                        <Button x:Name="LoadMavenSettingsButton"
+                                                Content="Read Mirrors From Config File"
+                                                Style="{StaticResource SecondaryButtonStyle}"
+                                                Click="OnLoadMavenSettingsClicked" />
+                                    </WrapPanel>
 
                                     <TextBlock x:Name="SettingsToolchainsFilePathLabelTextBlock"
                                                Margin="0,16,0,0"
@@ -1965,6 +1950,7 @@
                                                  Grid.Column="0"
                                                  Height="36"
                                                  Margin="0,0,10,0"
+                                                 LostFocus="OnMavenToolchainsFilePathLostFocus"
                                                  Style="{StaticResource InputTextBoxStyle}"
                                                  VerticalContentAlignment="Center" />
                                         <Button x:Name="BrowseMavenToolchainsFileButton"
@@ -2245,6 +2231,7 @@
                     <TextBox x:Name="CustomMavenMirrorUrlTextBox" />
                     <TextBox x:Name="CustomMavenMirrorOfTextBox" />
                     <ListBox x:Name="ConfiguredMavenMirrorsListBox" />
+                    <Button x:Name="ImportMirrorXmlButton" Visibility="Collapsed" />
                     <Button x:Name="UpdateSelectedMirrorButton" />
                     <ComboBox x:Name="MavenDownloadSourceComboBox" />
                     <TextBlock x:Name="MavenDownloadSourceBaseUrlTextBlock" />
