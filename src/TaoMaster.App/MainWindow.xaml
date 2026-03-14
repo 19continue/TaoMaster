@@ -1712,58 +1712,6 @@
                                                 Style="{StaticResource SecondaryButtonStyle}"
                                                 Click="OnOpenMavenToolchainsFileClicked" />
                                     </Grid>
-                                    <WrapPanel Margin="0,12,0,0">
-                                        <Button x:Name="LoadMavenToolchainsButton"
-                                                Content="Read Toolchains From Config File"
-                                                Style="{StaticResource SecondaryButtonStyle}"
-                                                Click="OnLoadMavenToolchainsClicked" />
-                                    </WrapPanel>
-
-                                    <TextBlock x:Name="ToolchainsJdkSelectorLabelTextBlock"
-                                               Margin="0,18,0,0"
-                                               FontWeight="SemiBold"
-                                               Foreground="{StaticResource InkBrush}"
-                                               Text="Insert Installed JDK" />
-                                    <Grid Margin="0,8,0,0">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-                                        <ComboBox x:Name="ToolchainsJdkComboBox"
-                                                  Grid.Column="0"
-                                                  Height="36"
-                                                  Margin="0,0,10,0"
-                                                  DisplayMemberPath="DisplayName"
-                                                  Style="{StaticResource InputComboBoxStyle}" />
-                                        <Button x:Name="InsertSelectedJdkToolchainButton"
-                                                Grid.Column="1"
-                                                Content="Insert Selected JDK"
-                                                Style="{StaticResource SecondaryButtonStyle}"
-                                                Click="OnInsertSelectedJdkToolchainClicked" />
-                                    </Grid>
-
-                                    <TextBlock x:Name="ToolchainsXmlEditorLabelTextBlock"
-                                               Margin="0,18,0,0"
-                                               FontWeight="SemiBold"
-                                               Foreground="{StaticResource InkBrush}"
-                                               Text="Toolchains XML" />
-                                    <TextBox x:Name="ToolchainsXmlEditorTextBox"
-                                             Margin="0,8,0,0"
-                                             MinHeight="240"
-                                             AcceptsReturn="True"
-                                             AcceptsTab="True"
-                                             HorizontalScrollBarVisibility="Auto"
-                                             VerticalScrollBarVisibility="Auto"
-                                             FontFamily="Consolas"
-                                             FontSize="12.5"
-                                             TextWrapping="NoWrap"
-                                             Style="{StaticResource InputTextBoxStyle}"
-                                             TextChanged="OnToolchainsXmlEditorTextChanged" />
-                                    <TextBlock x:Name="ToolchainsXmlEditorHintTextBlock"
-                                               Margin="0,10,0,0"
-                                               Style="{StaticResource BodyTextStyle}"
-                                               Text="Edit the full toolchains.xml here. TaoMaster can insert installed JDK entries and keeps the file formatted when saving." />
-
                                     <TextBlock Margin="0,16,0,0"
                                                Tag="settingsMavenLocalRepoLabel"
                                                FontWeight="SemiBold"
@@ -2034,6 +1982,58 @@
                                                 Click="OnOpenMavenToolchainsFileClicked" />
                                     </Grid>
 
+                                    <WrapPanel Margin="0,12,0,0">
+                                        <Button x:Name="LoadMavenToolchainsButton"
+                                                Content="Read Toolchains From Config File"
+                                                Style="{StaticResource SecondaryButtonStyle}"
+                                                Click="OnLoadMavenToolchainsClicked" />
+                                    </WrapPanel>
+
+                                    <TextBlock x:Name="ToolchainsJdkSelectorLabelTextBlock"
+                                               Margin="0,18,0,0"
+                                               FontWeight="SemiBold"
+                                               Foreground="{StaticResource InkBrush}"
+                                               Text="Insert Installed JDK" />
+                                    <Grid Margin="0,8,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <ComboBox x:Name="ToolchainsJdkComboBox"
+                                                  Grid.Column="0"
+                                                  Height="36"
+                                                  Margin="0,0,10,0"
+                                                  DisplayMemberPath="DisplayName"
+                                                  Style="{StaticResource InputComboBoxStyle}" />
+                                        <Button x:Name="InsertSelectedJdkToolchainButton"
+                                                Grid.Column="1"
+                                                Content="Insert Selected JDK"
+                                                Style="{StaticResource SecondaryButtonStyle}"
+                                                Click="OnInsertSelectedJdkToolchainClicked" />
+                                    </Grid>
+
+                                    <TextBlock x:Name="ToolchainsXmlEditorLabelTextBlock"
+                                               Margin="0,18,0,0"
+                                               FontWeight="SemiBold"
+                                               Foreground="{StaticResource InkBrush}"
+                                               Text="Toolchains XML" />
+                                    <TextBox x:Name="ToolchainsXmlEditorTextBox"
+                                             Margin="0,8,0,0"
+                                             MinHeight="240"
+                                             AcceptsReturn="True"
+                                             AcceptsTab="True"
+                                             HorizontalScrollBarVisibility="Auto"
+                                             VerticalScrollBarVisibility="Auto"
+                                             FontFamily="Consolas"
+                                             FontSize="12.5"
+                                             TextWrapping="NoWrap"
+                                             Style="{StaticResource InputTextBoxStyle}"
+                                             TextChanged="OnToolchainsXmlEditorTextChanged" />
+                                    <TextBlock x:Name="ToolchainsXmlEditorHintTextBlock"
+                                               Margin="0,10,0,0"
+                                               Style="{StaticResource BodyTextStyle}"
+                                               Text="Edit the full toolchains.xml here. TaoMaster can insert installed JDK entries and keeps the file formatted when saving." />
+
                                     <TextBlock Margin="0,16,0,0"
                                                Tag="settingsMavenLocalRepoLabel"
                                                FontWeight="SemiBold"
@@ -2175,6 +2175,54 @@
                                                FontSize="12.5"
                                                Foreground="{StaticResource MutedBrush}"
                                                TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Border>
+
+                            <Border Style="{StaticResource CardStyle}">
+                                <StackPanel>
+                                    <TextBlock x:Name="ConfiguredJdkToolchainsTitleTextBlock"
+                                               Style="{StaticResource SectionTitleStyle}"
+                                               Text="Current JDK Toolchains" />
+                                    <TextBlock x:Name="ConfiguredJdkToolchainsHintTextBlock"
+                                               Margin="0,10,0,16"
+                                               Style="{StaticResource BodyTextStyle}"
+                                               Text="Select a toolchain entry, then update it with the installed JDK selected on the left or remove it directly." />
+                                    <ListBox x:Name="ConfiguredJdkToolchainsListBox"
+                                             MinHeight="280"
+                                             Style="{StaticResource CleanListBoxStyle}"
+                                             ItemContainerStyle="{StaticResource SelectablePanelListItemStyle}"
+                                             SelectionChanged="OnConfiguredJdkToolchainsSelectionChanged"
+                                             PreviewMouseWheel="OnEmbeddedListPreviewMouseWheel">
+                                        <ListBox.ItemTemplate>
+                                            <DataTemplate>
+                                                <StackPanel Margin="0,14,16,14">
+                                                    <TextBlock Text="{Binding DisplayName}"
+                                                               FontSize="15"
+                                                               FontWeight="SemiBold"
+                                                               Foreground="{StaticResource InkBrush}" />
+                                                    <TextBlock Margin="0,6,0,0"
+                                                               Text="{Binding Detail}"
+                                                               Style="{StaticResource BodyTextStyle}" />
+                                                    <TextBlock Margin="0,8,0,0"
+                                                               FontFamily="Consolas"
+                                                               FontSize="12.5"
+                                                               Foreground="{StaticResource MutedBrush}"
+                                                               Text="{Binding JdkHome}"
+                                                               TextWrapping="Wrap" />
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ListBox.ItemTemplate>
+                                    </ListBox>
+                                    <WrapPanel Margin="0,16,0,0">
+                                        <Button x:Name="UpdateSelectedJdkToolchainButton"
+                                                Content="Update Selected Toolchain"
+                                                Style="{StaticResource SecondaryButtonStyle}"
+                                                Click="OnUpdateSelectedJdkToolchainClicked" />
+                                        <Button x:Name="RemoveSelectedJdkToolchainButton"
+                                                Content="Remove Selected Toolchain"
+                                                Style="{StaticResource DangerButtonStyle}"
+                                                Click="OnRemoveSelectedJdkToolchainClicked" />
+                                    </WrapPanel>
                                 </StackPanel>
                             </Border>
 

@@ -69,6 +69,7 @@ public partial class MainWindow : Window
     private AppLocalizer _localizer;
     private readonly ObservableCollection<string> _activityEntries = [];
     private readonly ObservableCollection<MavenMirrorConfiguration> _configuredMavenMirrors = [];
+    private readonly ObservableCollection<JdkToolchainListItem> _configuredJdkToolchains = [];
     private readonly ObservableCollection<JdkDownloadSourceConfiguration> _availableJdkDownloadSources = [];
     private readonly ObservableCollection<MavenDownloadSourceConfiguration> _availableMavenDownloadSources = [];
     private bool _hasLoaded;
@@ -114,6 +115,7 @@ public partial class MainWindow : Window
         InitializeComponent();
         ActivityListBox.ItemsSource = _activityEntries;
         ConfiguredMavenMirrorsListBox.ItemsSource = _configuredMavenMirrors;
+        ConfiguredJdkToolchainsListBox.ItemsSource = _configuredJdkToolchains;
         BuiltInMavenMirrorComboBox.ItemsSource = _mavenConfigurationService.GetBuiltInMirrors();
         RemoteJdkDownloadSourceComboBox.ItemsSource = _availableJdkDownloadSources;
         SettingsJdkDownloadSourceComboBox.ItemsSource = _availableJdkDownloadSources;
@@ -322,6 +324,12 @@ public partial class MainWindow : Window
         ToolchainsXmlEditorHintTextBlock.Text = Localize(
             "Edit the full toolchains.xml here. TaoMaster can insert installed JDK entries and keeps the file formatted when saving.",
             "在这里编辑完整的 toolchains.xml。TaoMaster 可以插入已安装的 JDK 条目，并在保存时整理文件格式。");
+        ConfiguredJdkToolchainsTitleTextBlock.Text = Localize("Current JDK Toolchains", "当前 JDK toolchains");
+        ConfiguredJdkToolchainsHintTextBlock.Text = Localize(
+            "Select a toolchain entry, then update it with the installed JDK selected on the left or remove it directly.",
+            "先选择一个 toolchain 条目，再用左侧选中的已安装 JDK 更新它，或直接移除。");
+        UpdateSelectedJdkToolchainButton.Content = Localize("Update Selected Toolchain", "更新所选 toolchain");
+        RemoveSelectedJdkToolchainButton.Content = Localize("Remove Selected Toolchain", "移除所选 toolchain");
         MavenConfigTargetTitleTextBlock.Text = Localize("Current Target", "当前目标");
         MavenConfigTargetDescriptionTextBlock.Text = Localize(
             "Global scope writes to the selected Maven installation. User scope writes to the current user's .m2 directory.",
@@ -493,6 +501,7 @@ public partial class MainWindow : Window
         SelectInstallationInComboBox(DashboardJdkComboBox, _state.Jdks, preferredJdkId ?? _state.ActiveSelection.JdkId);
         SelectInstallationInComboBox(DashboardMavenComboBox, _state.Mavens, preferredMavenId ?? _state.ActiveSelection.MavenId);
         SelectInstallationInComboBox(ToolchainsJdkComboBox, _state.Jdks, preferredJdkId ?? _state.ActiveSelection.JdkId);
+        RefreshConfiguredJdkToolchains(GetSelectedToolchainJdkHome());
 
         PowerShellScriptTextBox.Text = BuildShellPreviewText("powershell");
         EnvironmentSnapshotTextBox.Text = BuildEnvironmentSnapshot(selection);
@@ -686,12 +695,60 @@ public partial class MainWindow : Window
         SetToolchainsEditorText(xmlContent);
     }
 
-    private void SetToolchainsEditorText(string xmlContent)
+    private void SetToolchainsEditorText(string xmlContent, string? preferredJdkHome = null)
     {
         _suppressToolchainsEditorTextChanged = true;
         ToolchainsXmlEditorTextBox.Text = xmlContent;
         _suppressToolchainsEditorTextChanged = false;
         _toolchainsEditorDirty = false;
+        RefreshConfiguredJdkToolchains(preferredJdkHome);
+    }
+
+    private void RefreshConfiguredJdkToolchains(string? preferredJdkHome = null)
+    {
+        IReadOnlyList<MavenJdkToolchainConfiguration> toolchains;
+
+        try
+        {
+            toolchains = _mavenConfigurationService.ReadJdkToolchains(ToolchainsXmlEditorTextBox.Text);
+        }
+        catch
+        {
+            toolchains = Array.Empty<MavenJdkToolchainConfiguration>();
+        }
+
+        _configuredJdkToolchains.Clear();
+        foreach (var toolchain in toolchains)
+        {
+            var matchedInstallation = _state.Jdks.FirstOrDefault(installation =>
+                PathsEqual(installation.HomeDirectory, toolchain.JdkHome));
+            var detailSegments = new List<string>();
+
+            if (!string.IsNullOrWhiteSpace(toolchain.Vendor))
+            {
+                detailSegments.Add(toolchain.Vendor.Trim());
+            }
+
+            if (!string.IsNullOrWhiteSpace(toolchain.Architecture))
+            {
+                detailSegments.Add(toolchain.Architecture.Trim());
+            }
+
+            detailSegments.Add(matchedInstallation?.DisplayName ?? Localize("Not linked to an installed JDK", "未关联到已安装 JDK"));
+
+            _configuredJdkToolchains.Add(new JdkToolchainListItem(
+                DisplayName: FormatLocalized("JDK {0}", "JDK {0}", toolchain.Version),
+                Detail: string.Join("  ·  ", detailSegments),
+                JdkHome: toolchain.JdkHome,
+                Version: toolchain.Version,
+                Vendor: toolchain.Vendor,
+                Architecture: toolchain.Architecture,
+                MatchedInstallationId: matchedInstallation?.Id));
+        }
+
+        var selectedJdkHome = preferredJdkHome ?? GetSelectedToolchainJdkHome();
+        ConfiguredJdkToolchainsListBox.SelectedItem = _configuredJdkToolchains.FirstOrDefault(item =>
+            PathsEqual(item.JdkHome, selectedJdkHome));
     }
 
     private IReadOnlyList<MavenMirrorConfiguration> ReadMirrorsFromEditor()
@@ -753,6 +810,31 @@ public partial class MainWindow : Window
         return int.TryParse(featureText, out var featureVersion) && featureVersion > 0
             ? featureVersion.ToString(CultureInfo.InvariantCulture)
             : normalized;
+    }
+
+    private string? GetSelectedToolchainJdkHome() =>
+        (ConfiguredJdkToolchainsListBox.SelectedItem as JdkToolchainListItem)?.JdkHome;
+
+    private static bool PathsEqual(string? left, string? right) =>
+        string.Equals(NormalizeComparablePath(left), NormalizeComparablePath(right), StringComparison.OrdinalIgnoreCase);
+
+    private static string NormalizeComparablePath(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return string.Empty;
+        }
+
+        var trimmed = path.Trim().TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+        try
+        {
+            return Path.GetFullPath(trimmed);
+        }
+        catch
+        {
+            return trimmed;
+        }
     }
 
     private void PopulateMavenMirrorEditor(MavenMirrorConfiguration? mirror)
@@ -1749,6 +1831,17 @@ public partial class MainWindow : Window
             });
     }
 
+    private void OnConfiguredJdkToolchainsSelectionChanged(object sender, WpfSelectionChangedEventArgs e)
+    {
+        if (ConfiguredJdkToolchainsListBox.SelectedItem is not JdkToolchainListItem selectedToolchain
+            || string.IsNullOrWhiteSpace(selectedToolchain.MatchedInstallationId))
+        {
+            return;
+        }
+
+        SelectInstallationInComboBox(ToolchainsJdkComboBox, _state.Jdks, selectedToolchain.MatchedInstallationId);
+    }
+
     private void OnAddBuiltInMirrorClicked(object sender, RoutedEventArgs e)
     {
         if (BuiltInMavenMirrorComboBox.SelectedItem is not MavenMirrorConfiguration selectedMirror)
@@ -1789,12 +1882,68 @@ public partial class MainWindow : Window
         {
             var toolchain = BuildJdkToolchainConfiguration(installation);
             var updatedXml = _mavenConfigurationService.UpsertJdkToolchain(ToolchainsXmlEditorTextBox.Text, toolchain);
-            SetToolchainsEditorText(updatedXml);
+            SetToolchainsEditorText(updatedXml, toolchain.JdkHome);
             _toolchainsEditorDirty = true;
             SetStatus(FormatLocalized(
                 "Inserted JDK toolchain: {0}",
                 "已插入 JDK toolchain：{0}",
                 installation.DisplayName));
+        }
+        catch (Exception ex)
+        {
+            ShowValidationMessage(ex.Message);
+        }
+    }
+
+    private void OnUpdateSelectedJdkToolchainClicked(object sender, RoutedEventArgs e)
+    {
+        if (ConfiguredJdkToolchainsListBox.SelectedItem is not JdkToolchainListItem selectedToolchain)
+        {
+            ShowValidationMessage(Localize("Select a toolchain entry first.", "请先选择一个 toolchain 条目。"));
+            return;
+        }
+
+        if (ToolchainsJdkComboBox.SelectedItem is not ManagedInstallation installation)
+        {
+            ShowValidationMessage(Localize("Select a JDK first.", "请先选择一个 JDK。"));
+            return;
+        }
+
+        try
+        {
+            var toolchain = BuildJdkToolchainConfiguration(installation);
+            var updatedXml = _mavenConfigurationService.RemoveJdkToolchain(ToolchainsXmlEditorTextBox.Text, selectedToolchain.JdkHome);
+            updatedXml = _mavenConfigurationService.UpsertJdkToolchain(updatedXml, toolchain);
+            SetToolchainsEditorText(updatedXml, toolchain.JdkHome);
+            _toolchainsEditorDirty = true;
+            SetStatus(FormatLocalized(
+                "Updated JDK toolchain: {0}",
+                "已更新 JDK toolchain：{0}",
+                installation.DisplayName));
+        }
+        catch (Exception ex)
+        {
+            ShowValidationMessage(ex.Message);
+        }
+    }
+
+    private void OnRemoveSelectedJdkToolchainClicked(object sender, RoutedEventArgs e)
+    {
+        if (ConfiguredJdkToolchainsListBox.SelectedItem is not JdkToolchainListItem selectedToolchain)
+        {
+            ShowValidationMessage(Localize("Select a toolchain entry first.", "请先选择一个 toolchain 条目。"));
+            return;
+        }
+
+        try
+        {
+            var updatedXml = _mavenConfigurationService.RemoveJdkToolchain(ToolchainsXmlEditorTextBox.Text, selectedToolchain.JdkHome);
+            SetToolchainsEditorText(updatedXml);
+            _toolchainsEditorDirty = true;
+            SetStatus(FormatLocalized(
+                "Removed JDK toolchain: {0}",
+                "已移除 JDK toolchain：{0}",
+                selectedToolchain.DisplayName));
         }
         catch (Exception ex)
         {
@@ -3575,6 +3724,7 @@ public partial class MainWindow : Window
         }
 
         _toolchainsEditorDirty = true;
+        RefreshConfiguredJdkToolchains(GetSelectedToolchainJdkHome());
     }
 
     private void OnComboBoxPreviewMouseWheel(object sender, MouseWheelEventArgs e)

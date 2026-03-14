@@ -121,6 +121,46 @@ public sealed class MavenConfigurationService
         return SaveDocumentToString(NormalizeToolchainsDocument(document));
     }
 
+    public IReadOnlyList<MavenJdkToolchainConfiguration> ReadJdkToolchains(string xmlContent)
+    {
+        var document = string.IsNullOrWhiteSpace(xmlContent)
+            ? CreateToolchainsDocument()
+            : XDocument.Parse(xmlContent, LoadOptions.PreserveWhitespace);
+        document = NormalizeToolchainsDocument(document);
+
+        var root = document.Root ?? throw new InvalidOperationException("The toolchains.xml root element is invalid.");
+        var elementNamespace = GetElementNamespace(root);
+
+        return root
+            .Elements(elementNamespace + "toolchain")
+            .Where(element =>
+                string.Equals(
+                    element.Element(elementNamespace + "type")?.Value?.Trim(),
+                    "jdk",
+                    StringComparison.OrdinalIgnoreCase))
+            .Select(element =>
+            {
+                var providesElement = element.Element(elementNamespace + "provides");
+                var configurationElement = element.Element(elementNamespace + "configuration");
+                var jdkHome = configurationElement?.Element(elementNamespace + "jdkHome")?.Value?.Trim();
+                var version = providesElement?.Element(elementNamespace + "version")?.Value?.Trim();
+
+                if (string.IsNullOrWhiteSpace(jdkHome) || string.IsNullOrWhiteSpace(version))
+                {
+                    return null;
+                }
+
+                return new MavenJdkToolchainConfiguration(
+                    JdkHome: NormalizeComparablePath(jdkHome),
+                    Version: version,
+                    Vendor: providesElement?.Element(elementNamespace + "vendor")?.Value?.Trim(),
+                    Architecture: providesElement?.Element(elementNamespace + "arch")?.Value?.Trim());
+            })
+            .Where(toolchain => toolchain is not null)
+            .Cast<MavenJdkToolchainConfiguration>()
+            .ToList();
+    }
+
     public string UpsertJdkToolchain(string xmlContent, MavenJdkToolchainConfiguration toolchain)
     {
         if (string.IsNullOrWhiteSpace(toolchain.JdkHome))
@@ -140,7 +180,7 @@ public sealed class MavenConfigurationService
 
         var root = document.Root ?? throw new InvalidOperationException("The toolchains.xml root element is invalid.");
         var elementNamespace = GetElementNamespace(root);
-        var normalizedJdkHome = Path.GetFullPath(toolchain.JdkHome.Trim());
+        var normalizedJdkHome = NormalizeComparablePath(toolchain.JdkHome);
 
         var existingEntries = root
             .Elements(elementNamespace + "toolchain")
@@ -151,7 +191,7 @@ public sealed class MavenConfigurationService
                     StringComparison.OrdinalIgnoreCase))
             .Where(element =>
                 string.Equals(
-                    Path.GetFullPath(element
+                    NormalizeComparablePath(element
                         .Element(elementNamespace + "configuration")
                         ?.Element(elementNamespace + "jdkHome")
                         ?.Value
@@ -166,6 +206,42 @@ public sealed class MavenConfigurationService
         }
 
         root.Add(BuildJdkToolchainElement(toolchain, elementNamespace));
+        return SaveDocumentToString(NormalizeToolchainsDocument(document));
+    }
+
+    public string RemoveJdkToolchain(string xmlContent, string jdkHome)
+    {
+        if (string.IsNullOrWhiteSpace(jdkHome))
+        {
+            throw new InvalidOperationException("JDK home cannot be empty.");
+        }
+
+        var document = string.IsNullOrWhiteSpace(xmlContent)
+            ? CreateToolchainsDocument()
+            : XDocument.Parse(xmlContent, LoadOptions.PreserveWhitespace);
+        document = NormalizeToolchainsDocument(document);
+
+        var root = document.Root ?? throw new InvalidOperationException("The toolchains.xml root element is invalid.");
+        var elementNamespace = GetElementNamespace(root);
+        var normalizedJdkHome = NormalizeComparablePath(jdkHome);
+
+        root.Elements(elementNamespace + "toolchain")
+            .Where(element =>
+                string.Equals(
+                    element.Element(elementNamespace + "type")?.Value?.Trim(),
+                    "jdk",
+                    StringComparison.OrdinalIgnoreCase))
+            .Where(element =>
+                string.Equals(
+                    NormalizeComparablePath(element
+                        .Element(elementNamespace + "configuration")
+                        ?.Element(elementNamespace + "jdkHome")
+                        ?.Value
+                        ?.Trim() ?? string.Empty),
+                    normalizedJdkHome,
+                    StringComparison.OrdinalIgnoreCase))
+            .Remove();
+
         return SaveDocumentToString(NormalizeToolchainsDocument(document));
     }
 
@@ -422,7 +498,26 @@ public sealed class MavenConfigurationService
             provides,
             new XElement(
                 elementNamespace + "configuration",
-                new XElement(elementNamespace + "jdkHome", Path.GetFullPath(toolchain.JdkHome.Trim()))));
+                new XElement(elementNamespace + "jdkHome", NormalizeComparablePath(toolchain.JdkHome))));
+    }
+
+    private static string NormalizeComparablePath(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return string.Empty;
+        }
+
+        var trimmed = path.Trim().TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+        try
+        {
+            return Path.GetFullPath(trimmed);
+        }
+        catch
+        {
+            return trimmed;
+        }
     }
 
     private static void ReplaceSingleElement(XElement root, string localName, string value, XNamespace elementNamespace)
