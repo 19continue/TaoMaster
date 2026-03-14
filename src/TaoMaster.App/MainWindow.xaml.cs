@@ -77,6 +77,7 @@ public partial class MainWindow : Window
     private bool _suppressLanguageSelectionChanged;
     private bool _suppressConfigurationScopeSelectionChanged;
     private bool _suppressProjectSelectionChanged;
+    private bool _suppressProjectOpenBehaviorChanged;
     private bool _suppressDownloadSourceSelectionChanged;
     private bool _suppressMirrorEditorTextChanged;
     private bool _suppressToolchainsEditorTextChanged;
@@ -365,6 +366,7 @@ public partial class MainWindow : Window
         ImportProjectButton.Content = Localize("Import Project", "导入项目");
         RefreshProjectButton.Content = Localize("Refresh Project", "刷新项目");
         OpenProjectFolderButton.Content = Localize("Open Folder", "打开目录");
+        OpenProjectInIdeaButton.Content = Localize("Open in IDEA", "用 IDEA 打开");
         RemoveProjectButton.Content = Localize("Remove Project", "移除项目");
         ProjectsDetectionTitleTextBlock.Text = Localize("Detected Project Markers", "已识别的项目标记");
         ProjectsDetectionDescriptionTextBlock.Text = Localize(
@@ -384,6 +386,9 @@ public partial class MainWindow : Window
             "保存这个项目应该使用的 JDK 和 Maven 组合，并在需要时把它直接应用到当前全局环境。");
         ProjectsBoundJdkLabelTextBlock.Text = Localize("Bound JDK", "绑定 JDK");
         ProjectsBoundMavenLabelTextBlock.Text = Localize("Bound Maven", "绑定 Maven");
+        ProjectAutoApplyOnOpenCheckBox.Content = Localize(
+            "Auto-apply bindings when opening this project in IDEA",
+            "使用 IDEA 打开这个项目时自动应用绑定");
         SaveProjectBindingButton.Content = Localize("Save Bindings", "保存绑定");
         ApplyProjectBindingButton.Content = Localize("Apply Project Bindings", "应用项目绑定");
         ClearProjectBindingButton.Content = Localize("Clear Bindings", "清空绑定");
@@ -1084,6 +1089,10 @@ public partial class MainWindow : Window
             ? Localize("Doctor is currently scoped to environment checks only.", "当前 Doctor 只执行环境级检查。")
             : BuildProjectDoctorContext(project);
 
+        _suppressProjectOpenBehaviorChanged = true;
+        ProjectAutoApplyOnOpenCheckBox.IsChecked = project?.AutoApplyBindingsOnOpen == true;
+        _suppressProjectOpenBehaviorChanged = false;
+
         SelectInstallationInComboBox(ProjectJdkComboBox, _state.Jdks, project?.BoundJdkId, selectFirstWhenEmpty: false);
         SelectInstallationInComboBox(ProjectMavenComboBox, _state.Mavens, project?.BoundMavenId, selectFirstWhenEmpty: false);
     }
@@ -1402,6 +1411,11 @@ public partial class MainWindow : Window
             suggestions.Add(Localize("IDEA already exposes a project JDK hint. Match it with a TaoMaster JDK binding to reduce drift.", "IDEA 已经暴露项目 JDK 提示。把它和 TaoMaster 的 JDK 绑定对齐，能减少环境漂移。"));
         }
 
+        if ((project.BoundJdkId is not null || project.BoundMavenId is not null) && !project.AutoApplyBindingsOnOpen)
+        {
+            suggestions.Add(Localize("Enable automatic binding application if you want TaoMaster to switch the environment before launching IDEA.", "如果你希望 TaoMaster 在启动 IDEA 前自动切换环境，可以开启自动应用绑定。"));
+        }
+
         if (suggestions.Count == 0)
         {
             suggestions.Add(Localize("Project markers look healthy. Apply the stored bindings before opening or refreshing the IDEA project.", "项目标记看起来正常。打开或刷新 IDEA 项目前，先应用已保存的项目绑定即可。"));
@@ -1426,6 +1440,7 @@ public partial class MainWindow : Window
             {
                 $"JDK: {boundJdk}",
                 $"Maven: {boundMaven}",
+                $"{Localize("Open behavior", "打开行为")}: {(project.AutoApplyBindingsOnOpen ? Localize("Apply bindings before opening in IDEA", "用 IDEA 打开前先应用绑定") : Localize("Open without automatic switching", "打开时不自动切换"))}",
                 alignmentText
             });
     }
@@ -1442,7 +1457,8 @@ public partial class MainWindow : Window
                 $"{Localize("Project", "项目")}: {project.DisplayName}",
                 $"{Localize("Path", "路径")}: {project.ProjectDirectory}",
                 $"{Localize("Bound JDK", "绑定 JDK")}: {boundJdk}",
-                $"{Localize("Bound Maven", "绑定 Maven")}: {boundMaven}"
+                $"{Localize("Bound Maven", "绑定 Maven")}: {boundMaven}",
+                $"{Localize("Open behavior", "打开行为")}: {(project.AutoApplyBindingsOnOpen ? Localize("Auto-apply bindings on IDEA launch", "用 IDEA 打开时自动应用绑定") : Localize("No automatic switching on IDEA launch", "用 IDEA 打开时不自动切换"))}"
             });
     }
 
@@ -1459,6 +1475,108 @@ public partial class MainWindow : Window
 
     private string BuildProjectFlag(bool value) =>
         value ? Localize("Yes", "是") : Localize("No", "否");
+
+    private string? FindIdeaLauncherPath()
+    {
+        foreach (var candidate in EnumerateIdeaLauncherCandidates())
+        {
+            if (!string.IsNullOrWhiteSpace(candidate) && System.IO.File.Exists(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        return null;
+    }
+
+    private IEnumerable<string> EnumerateIdeaLauncherCandidates()
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var envVar in new[] { "IDEA_HOME", "JETBRAINS_INTELLIJ_HOME" })
+        {
+            var home = Environment.GetEnvironmentVariable(envVar);
+            if (string.IsNullOrWhiteSpace(home))
+            {
+                continue;
+            }
+
+            foreach (var fileName in new[] { "idea64.exe", "idea.exe", "idea.bat", "idea.cmd" })
+            {
+                var candidate = Path.Combine(home, "bin", fileName);
+                if (seen.Add(candidate))
+                {
+                    yield return candidate;
+                }
+            }
+        }
+
+        var pathValue = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
+        foreach (var segment in pathValue.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            foreach (var fileName in new[] { "idea64.exe", "idea.exe", "idea.bat", "idea.cmd" })
+            {
+                var candidate = Path.Combine(segment, fileName);
+                if (seen.Add(candidate))
+                {
+                    yield return candidate;
+                }
+            }
+        }
+
+        foreach (var root in GetIdeaSearchRoots())
+        {
+            foreach (var candidate in EnumerateIdeaInstallations(root))
+            {
+                if (seen.Add(candidate))
+                {
+                    yield return candidate;
+                }
+            }
+        }
+    }
+
+    private static IEnumerable<string> GetIdeaSearchRoots()
+    {
+        var roots = new[]
+        {
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "JetBrains"),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs"),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "JetBrains", "Toolbox", "apps", "IDEA-U"),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "JetBrains", "Toolbox", "apps", "IDEA-C")
+        };
+
+        return roots.Where(System.IO.Directory.Exists);
+    }
+
+    private static IEnumerable<string> EnumerateIdeaInstallations(string root)
+    {
+        IEnumerable<string> searchRoots;
+
+        if (root.Contains("Toolbox", StringComparison.OrdinalIgnoreCase))
+        {
+            var channelRoots = System.IO.Directory.Exists(Path.Combine(root, "ch-0"))
+                ? new[] { Path.Combine(root, "ch-0") }
+                : Array.Empty<string>();
+
+            searchRoots = channelRoots.SelectMany(channelRoot =>
+                System.IO.Directory.EnumerateDirectories(channelRoot)
+                    .OrderByDescending(path => path, StringComparer.OrdinalIgnoreCase));
+        }
+        else
+        {
+            searchRoots = System.IO.Directory.EnumerateDirectories(root, "IntelliJ IDEA*", System.IO.SearchOption.TopDirectoryOnly)
+                .OrderByDescending(path => path, StringComparer.OrdinalIgnoreCase);
+        }
+
+        foreach (var directory in searchRoots)
+        {
+            foreach (var fileName in new[] { "idea64.exe", "idea.exe", "idea.bat", "idea.cmd" })
+            {
+                yield return Path.Combine(directory, "bin", fileName);
+            }
+        }
+    }
 
     private string BuildEnvironmentSnapshot(ActiveToolchainSelection selection, ManagedProject? project)
     {
@@ -2012,6 +2130,26 @@ public partial class MainWindow : Window
         RefreshStateBindings(GetSelectedInstallationId(JdkListBox), GetSelectedInstallationId(MavenListBox), selectedProject?.Id);
     }
 
+    private void OnProjectAutoApplyOnOpenChanged(object sender, RoutedEventArgs e)
+    {
+        if (_suppressProjectOpenBehaviorChanged || GetSelectedProject() is not ManagedProject project)
+        {
+            return;
+        }
+
+        var result = _projectCatalogService.UpdateOpenBehavior(
+            _state,
+            project.Id,
+            ProjectAutoApplyOnOpenCheckBox.IsChecked == true);
+
+        _state = result.State;
+        _stateStore.Save(_layout, _state);
+        RefreshStateBindings(GetSelectedInstallationId(JdkListBox), GetSelectedInstallationId(MavenListBox), result.Project.Id);
+        SetStatus(ProjectAutoApplyOnOpenCheckBox.IsChecked == true
+            ? FormatLocalized("Project open behavior updated: {0}", "项目打开行为已更新：{0}", result.Project.DisplayName)
+            : FormatLocalized("Project auto-apply was disabled: {0}", "已关闭项目自动应用：{0}", result.Project.DisplayName));
+    }
+
     private void OnDiagnosticsNavClicked(object sender, RoutedEventArgs e)
     {
         _currentSection = AppSection.Diagnostics;
@@ -2104,6 +2242,62 @@ public partial class MainWindow : Window
         });
 
         SetStatus(FormatLocalized("Opened project folder: {0}", "已打开项目目录：{0}", project.DisplayName));
+    }
+
+    private async void OnOpenProjectInIdeaClicked(object sender, RoutedEventArgs e)
+    {
+        var project = GetSelectedProject();
+        if (project is null || !System.IO.Directory.Exists(project.ProjectDirectory))
+        {
+            ShowValidationMessage(Localize("Select a project with a valid directory first.", "请先选择一个目录有效的项目。"));
+            return;
+        }
+
+        var ideaLauncher = FindIdeaLauncherPath();
+        if (string.IsNullOrWhiteSpace(ideaLauncher))
+        {
+            ShowValidationMessage(Localize(
+                "IntelliJ IDEA was not found. Add it to PATH or install it in a standard JetBrains location first.",
+                "没有找到 IntelliJ IDEA。请先把它加入 PATH，或者安装到常见的 JetBrains 目录。"));
+            return;
+        }
+
+        await ExecuteBusyWithMessageAsync(
+            Localize("Opening the selected project in IntelliJ IDEA...", "正在用 IntelliJ IDEA 打开项目..."),
+            async () =>
+            {
+                var currentProject = project;
+                var appliedBindings = false;
+
+                if (currentProject.AutoApplyBindingsOnOpen
+                    && (!string.IsNullOrWhiteSpace(currentProject.BoundJdkId) || !string.IsNullOrWhiteSpace(currentProject.BoundMavenId)))
+                {
+                    var applyResult = await Task.Run(() => _projectCatalogService.ApplyProjectBindings(_state, currentProject.Id));
+                    _state = applyResult.State;
+                    currentProject = applyResult.Project;
+                    await Task.Run(() => _stateStore.Save(_layout, _state));
+                    await Task.Run(() => ApplyActivationWithShellIntegration(_state));
+                    appliedBindings = true;
+                }
+
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = ideaLauncher,
+                    Arguments = $"\"{currentProject.ProjectDirectory}\"",
+                    WorkingDirectory = currentProject.ProjectDirectory,
+                    UseShellExecute = true
+                });
+
+                InvalidateDoctorOutput();
+                RefreshStateBindings(
+                    GetSelectedInstallationId(JdkListBox),
+                    GetSelectedInstallationId(MavenListBox),
+                    currentProject.Id);
+
+                return appliedBindings
+                    ? FormatLocalized("Opened {0} in IDEA and applied its project bindings.", "已用 IDEA 打开 {0}，并应用项目绑定。", currentProject.DisplayName)
+                    : FormatLocalized("Opened {0} in IDEA.", "已用 IDEA 打开 {0}。", currentProject.DisplayName);
+            });
     }
 
     private async void OnRemoveProjectClicked(object sender, RoutedEventArgs e)

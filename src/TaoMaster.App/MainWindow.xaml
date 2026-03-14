@@ -1166,6 +1166,11 @@
                                                 Content="Open Folder"
                                                 Style="{StaticResource SecondaryButtonStyle}"
                                                 Click="OnOpenProjectFolderClicked" />
+                                        <Button x:Name="OpenProjectInIdeaButton"
+                                                Tag="projectsOpenInIdeaButton"
+                                                Content="Open in IDEA"
+                                                Style="{StaticResource SecondaryButtonStyle}"
+                                                Click="OnOpenProjectInIdeaClicked" />
                                         <Button x:Name="RemoveProjectButton"
                                                 Tag="projectsRemoveButton"
                                                 Content="Remove Project"
@@ -1323,6 +1328,14 @@
                                               Height="38"
                                               PreviewMouseWheel="OnComboBoxPreviewMouseWheel"
                                               Style="{StaticResource InputComboBoxStyle}" />
+
+                                    <CheckBox x:Name="ProjectAutoApplyOnOpenCheckBox"
+                                              Margin="0,16,0,0"
+                                              VerticalAlignment="Center"
+                                              Content="Auto-apply bindings when opening this project in IDEA"
+                                              Foreground="{StaticResource InkBrush}"
+                                              Checked="OnProjectAutoApplyOnOpenChanged"
+                                              Unchecked="OnProjectAutoApplyOnOpenChanged" />
 
                                     <WrapPanel Margin="0,16,0,0">
                                         <Button x:Name="SaveProjectBindingButton"

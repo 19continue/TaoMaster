@@ -21,6 +21,7 @@ public sealed class ProjectCatalogService
             ProjectDirectory: normalizedDirectory,
             BoundJdkId: NormalizeBoundId(existingProject?.BoundJdkId, state.Jdks),
             BoundMavenId: NormalizeBoundId(existingProject?.BoundMavenId, state.Mavens),
+            AutoApplyBindingsOnOpen: existingProject?.AutoApplyBindingsOnOpen ?? false,
             LastScannedAtUtc: DateTimeOffset.UtcNow,
             Detection: detection);
 
@@ -58,6 +59,20 @@ public sealed class ProjectCatalogService
     {
         var project = FindProject(state, projectId);
         return ImportOrRefreshProject(state with { ActiveProjectId = project.Id }, project.ProjectDirectory);
+    }
+
+    public (ManagerState State, ManagedProject Project) UpdateOpenBehavior(
+        ManagerState state,
+        string projectId,
+        bool autoApplyBindingsOnOpen)
+    {
+        var project = FindProject(state, projectId);
+        var updatedProject = project with
+        {
+            AutoApplyBindingsOnOpen = autoApplyBindingsOnOpen
+        };
+
+        return (ReplaceProject(state, updatedProject) with { ActiveProjectId = updatedProject.Id }, updatedProject);
     }
 
     public ManagerState RemoveProject(ManagerState state, string projectId)

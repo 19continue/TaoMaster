@@ -6,5 +6,6 @@ public sealed record ManagedProject(
     string ProjectDirectory,
     string? BoundJdkId,
     string? BoundMavenId,
+    bool AutoApplyBindingsOnOpen,
     DateTimeOffset LastScannedAtUtc,
     ProjectDetectionSnapshot Detection);
