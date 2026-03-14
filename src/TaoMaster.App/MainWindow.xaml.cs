@@ -49,6 +49,7 @@ public partial class MainWindow : Window
     private readonly ManagerStateStore _stateStore;
     private readonly LocalInstallationDiscoveryService _discoveryService;
     private readonly InstallationCatalogService _catalogService;
+    private readonly ProjectCatalogService _projectCatalogService;
     private readonly ToolchainSelectionResolver _selectionResolver;
     private readonly WindowsUserEnvironmentService _environmentService;
     private readonly SelectionActivationService _activationService;
@@ -75,6 +76,7 @@ public partial class MainWindow : Window
     private bool _hasLoaded;
     private bool _suppressLanguageSelectionChanged;
     private bool _suppressConfigurationScopeSelectionChanged;
+    private bool _suppressProjectSelectionChanged;
     private bool _suppressDownloadSourceSelectionChanged;
     private bool _suppressMirrorEditorTextChanged;
     private bool _suppressToolchainsEditorTextChanged;
@@ -91,6 +93,7 @@ public partial class MainWindow : Window
         var inspector = new InstallationInspector();
         _discoveryService = new LocalInstallationDiscoveryService(inspector);
         _catalogService = new InstallationCatalogService(inspector);
+        _projectCatalogService = new ProjectCatalogService();
         _selectionResolver = new ToolchainSelectionResolver();
         _environmentService = new WindowsUserEnvironmentService();
         _activationService = new SelectionActivationService(_selectionResolver, _environmentService);
@@ -355,6 +358,36 @@ public partial class MainWindow : Window
         RemoteMavenAvailabilityHintTextBlock.Text = Localize(
             "Versions are checked against Apache's official download site in real time.",
             "版本会实时对照 Apache 官网下载地址进行校验。");
+        ProjectsLibraryTitleTextBlock.Text = Localize("Project Library", "项目库");
+        ProjectsLibraryDescriptionTextBlock.Text = Localize(
+            "Import a project directory, keep its detection markers fresh, and store the JDK/Maven pair you want IDEA work to align with.",
+            "导入项目目录、刷新识别到的标记，并保存这个项目希望与 IDEA 对齐的 JDK / Maven 组合。");
+        ImportProjectButton.Content = Localize("Import Project", "导入项目");
+        RefreshProjectButton.Content = Localize("Refresh Project", "刷新项目");
+        OpenProjectFolderButton.Content = Localize("Open Folder", "打开目录");
+        RemoveProjectButton.Content = Localize("Remove Project", "移除项目");
+        ProjectsDetectionTitleTextBlock.Text = Localize("Detected Project Markers", "已识别的项目标记");
+        ProjectsDetectionDescriptionTextBlock.Text = Localize(
+            "TaoMaster inspects Maven wrapper files, IDEA metadata, .java-version, and .sdkmanrc hints so you can compare project intent with your selected toolchain.",
+            "TaoMaster 会检查 Maven Wrapper、IDEA 元数据、.java-version 和 .sdkmanrc，方便你对比项目意图与当前工具链。");
+        ProjectsDetailTitleTextBlock.Text = Localize("Project Details", "项目详情");
+        ProjectsDetailDescriptionTextBlock.Text = Localize(
+            "Review the selected project path, latest scan time, and the most relevant IDEA / Maven hints before you save bindings.",
+            "在保存绑定前，先查看项目路径、最近扫描时间，以及最关键的 IDEA / Maven 提示。");
+        ProjectsNameLabelTextBlock.Text = Localize("Project Name", "项目名称");
+        ProjectsPathLabelTextBlock.Text = Localize("Project Path", "项目路径");
+        ProjectsLastScannedLabelTextBlock.Text = Localize("Last Scanned", "最近扫描");
+        ProjectsHintsLabelTextBlock.Text = Localize("Suggested Next Step", "建议下一步");
+        ProjectsBindingTitleTextBlock.Text = Localize("Project Bindings", "项目绑定");
+        ProjectsBindingDescriptionTextBlock.Text = Localize(
+            "Store the JDK and Maven pair this project should use, then apply the pair to the current global environment when needed.",
+            "保存这个项目应该使用的 JDK 和 Maven 组合，并在需要时把它直接应用到当前全局环境。");
+        ProjectsBoundJdkLabelTextBlock.Text = Localize("Bound JDK", "绑定 JDK");
+        ProjectsBoundMavenLabelTextBlock.Text = Localize("Bound Maven", "绑定 Maven");
+        SaveProjectBindingButton.Content = Localize("Save Bindings", "保存绑定");
+        ApplyProjectBindingButton.Content = Localize("Apply Project Bindings", "应用项目绑定");
+        ClearProjectBindingButton.Content = Localize("Clear Bindings", "清空绑定");
+        DiagnosticsSelectedProjectLabelTextBlock.Text = Localize("Project Context", "项目上下文");
     }
 
     private string Localize(string english, string chinese) =>
@@ -462,12 +495,13 @@ public partial class MainWindow : Window
         }
     }
 
-    private void RefreshStateBindings(string? preferredJdkId = null, string? preferredMavenId = null)
+    private void RefreshStateBindings(string? preferredJdkId = null, string? preferredMavenId = null, string? preferredProjectId = null)
     {
         _shellIntegrationStatus = _shellIntegrationService.GetStatus(_layout);
+        var selectedProject = _projectCatalogService.FindProjectOrDefault(_state, preferredProjectId ?? _state.ActiveProjectId);
 
         SidebarWorkspaceTextBlock.Text = _layout.RootDirectory;
-        SidebarScopeTextBlock.Text = _localizer["scopeGlobal"];
+        SidebarScopeTextBlock.Text = selectedProject is null ? _localizer["scopeGlobal"] : _localizer["scopeProject"];
         WorkspaceRootTextBlock.Text = _layout.RootDirectory;
         StateFileTextBlock.Text = _layout.StateFile;
         ManagedJdkInstallRootTextBox.Text = _state.Settings.ManagedJdkInstallRoot;
@@ -487,28 +521,34 @@ public partial class MainWindow : Window
         DashboardCurrentJdkPathTextBlock.Text = selection.Jdk?.HomeDirectory ?? _localizer["dashboardNoJdkDetail"];
         DashboardCurrentMavenTextBlock.Text = selection.Maven?.DisplayName ?? _localizer["nonePlaceholder"];
         DashboardCurrentMavenPathTextBlock.Text = selection.Maven?.HomeDirectory ?? _localizer["dashboardNoMavenDetail"];
-        DashboardScopeTextBlock.Text = _localizer["scopeGlobal"];
-        DashboardScopeDetailTextBlock.Text = _localizer["dashboardScopeDetail"];
-        ProjectsScopeTextBlock.Text = _localizer["projectsScopeValue"];
-        ProjectsScopeDetailTextBlock.Text = _localizer["projectsScopeDetail"];
-        ProjectsRulesTextBlock.Text = _localizer["projectsRulesValue"];
-        HeaderScopeBadgeTextBlock.Text = _localizer["scopeGlobal"];
+        DashboardScopeTextBlock.Text = selectedProject is null ? _localizer["scopeGlobal"] : _localizer["scopeProject"];
+        DashboardScopeDetailTextBlock.Text = selectedProject is null
+            ? _localizer["dashboardScopeDetail"]
+            : FormatLocalized("Active project: {0}", "当前项目：{0}", selectedProject.DisplayName);
+        HeaderScopeBadgeTextBlock.Text = selectedProject is null ? _localizer["scopeGlobal"] : _localizer["scopeProject"];
 
         JdkListBox.ItemsSource = _state.Jdks.ToList();
         MavenListBox.ItemsSource = _state.Mavens.ToList();
         DashboardJdkComboBox.ItemsSource = _state.Jdks.ToList();
         DashboardMavenComboBox.ItemsSource = _state.Mavens.ToList();
         ToolchainsJdkComboBox.ItemsSource = _state.Jdks.ToList();
+        ProjectJdkComboBox.ItemsSource = _state.Jdks.ToList();
+        ProjectMavenComboBox.ItemsSource = _state.Mavens.ToList();
+        ProjectsListBox.ItemsSource = _state.Projects.ToList();
 
         SelectInstallation(JdkListBox, _state.Jdks, preferredJdkId ?? _state.ActiveSelection.JdkId);
         SelectInstallation(MavenListBox, _state.Mavens, preferredMavenId ?? _state.ActiveSelection.MavenId);
         SelectInstallationInComboBox(DashboardJdkComboBox, _state.Jdks, preferredJdkId ?? _state.ActiveSelection.JdkId);
         SelectInstallationInComboBox(DashboardMavenComboBox, _state.Mavens, preferredMavenId ?? _state.ActiveSelection.MavenId);
         SelectInstallationInComboBox(ToolchainsJdkComboBox, _state.Jdks, preferredJdkId ?? _state.ActiveSelection.JdkId);
+        _suppressProjectSelectionChanged = true;
+        SelectProject(ProjectsListBox, _state.Projects, preferredProjectId ?? _state.ActiveProjectId);
+        _suppressProjectSelectionChanged = false;
         RefreshConfiguredJdkToolchains(GetSelectedToolchainJdkHome());
+        RefreshSelectedProjectDetails();
 
         PowerShellScriptTextBox.Text = BuildShellPreviewText("powershell");
-        EnvironmentSnapshotTextBox.Text = BuildEnvironmentSnapshot(selection);
+        EnvironmentSnapshotTextBox.Text = BuildEnvironmentSnapshot(selection, GetSelectedProject());
         RefreshEnvironmentHealth(selection);
 
         if (_lastDoctorReport is not null)
@@ -991,13 +1031,58 @@ public partial class MainWindow : Window
     private static void SelectInstallationInComboBox(
         WpfComboBox comboBox,
         IEnumerable<ManagedInstallation> installations,
-        string? installationId)
+        string? installationId,
+        bool selectFirstWhenEmpty = true)
     {
         var resolved = string.IsNullOrWhiteSpace(installationId)
-            ? installations.FirstOrDefault()
+            ? selectFirstWhenEmpty ? installations.FirstOrDefault() : null
             : installations.FirstOrDefault(installation => installation.Id.Equals(installationId, StringComparison.OrdinalIgnoreCase));
 
         comboBox.SelectedItem = resolved;
+    }
+
+    private static void SelectProject(
+        WpfListBox listBox,
+        IEnumerable<ManagedProject> projects,
+        string? projectId)
+    {
+        if (string.IsNullOrWhiteSpace(projectId))
+        {
+            listBox.SelectedItem = null;
+            return;
+        }
+
+        listBox.SelectedItem = projects.FirstOrDefault(project =>
+            project.Id.Equals(projectId, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private ManagedProject? GetSelectedProject() =>
+        ProjectsListBox.SelectedItem as ManagedProject
+        ?? _projectCatalogService.FindProjectOrDefault(_state, _state.ActiveProjectId);
+
+    private void RefreshSelectedProjectDetails()
+    {
+        var project = GetSelectedProject();
+        ProjectNameTextBlock.Text = project?.DisplayName ?? _localizer["nonePlaceholder"];
+        ProjectPathTextBlock.Text = project?.ProjectDirectory ?? _localizer["nonePlaceholder"];
+        ProjectLastScannedTextBlock.Text = project is null
+            ? _localizer["nonePlaceholder"]
+            : project.LastScannedAtUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.CurrentCulture);
+        ProjectDetectionTextBox.Text = project is null
+            ? Localize("Select a project to view detected files and hints.", "请选择一个项目以查看已识别的文件和提示。")
+            : BuildProjectDetectionText(project);
+        ProjectHintTextBlock.Text = project is null
+            ? Localize("Import a Maven project to store per-project JDK and Maven bindings.", "导入一个 Maven 项目后，就可以保存项目级 JDK 和 Maven 绑定。")
+            : BuildProjectHint(project);
+        ProjectBindingStatusTextBlock.Text = project is null
+            ? Localize("No project is selected.", "当前未选择项目。")
+            : BuildProjectBindingSummary(project);
+        DoctorProjectContextTextBlock.Text = project is null
+            ? Localize("Doctor is currently scoped to environment checks only.", "当前 Doctor 只执行环境级检查。")
+            : BuildProjectDoctorContext(project);
+
+        SelectInstallationInComboBox(ProjectJdkComboBox, _state.Jdks, project?.BoundJdkId, selectFirstWhenEmpty: false);
+        SelectInstallationInComboBox(ProjectMavenComboBox, _state.Mavens, project?.BoundMavenId, selectFirstWhenEmpty: false);
     }
 
     private void ApplyCurrentSection()
@@ -1015,6 +1100,20 @@ public partial class MainWindow : Window
             PageDescriptionTextBlock.Text = Localize(
                 "Manage settings.xml, toolchains.xml, the local repository, and mirror XML for Maven and IDE builds.",
                 "集中管理 Maven 与 IDE 构建所使用的 settings.xml、toolchains.xml、本地仓库和镜像 XML。");
+        }
+        else if (_currentSection == AppSection.Projects)
+        {
+            PageTitleTextBlock.Text = Localize("Projects", "项目");
+            PageDescriptionTextBlock.Text = Localize(
+                "Imported project folders, IDEA markers, and project-level JDK/Maven bindings are managed here.",
+                "这里管理项目目录、IDEA 标记，以及项目级 JDK / Maven 绑定。");
+        }
+        else if (_currentSection == AppSection.Diagnostics)
+        {
+            PageTitleTextBlock.Text = Localize("Diagnostics", "诊断");
+            PageDescriptionTextBlock.Text = Localize(
+                "Environment checks and selected project diagnostics are grouped here for direct troubleshooting.",
+                "这里聚合环境检查和当前项目诊断，方便直接定位问题。");
         }
         else if (_currentSection == AppSection.Settings)
         {
@@ -1239,7 +1338,126 @@ public partial class MainWindow : Window
         textBlock.Foreground = new SolidColorBrush(foreground);
     }
 
-    private string BuildEnvironmentSnapshot(ActiveToolchainSelection selection)
+    private string BuildProjectDetectionText(ManagedProject project)
+    {
+        var lines = new List<string>
+        {
+            $"pom.xml: {BuildProjectFlag(project.Detection.HasPomXml)}",
+            $"{Localize(".mvn directory", ".mvn 目录")}: {BuildProjectFlag(project.Detection.HasMavenDirectory)}",
+            $"{Localize("Maven wrapper", "Maven Wrapper")}: {BuildProjectFlag(project.Detection.HasMavenWrapper)}",
+            $"{Localize(".idea directory", ".idea 目录")}: {BuildProjectFlag(project.Detection.HasIdeaDirectory)}"
+        };
+
+        if (!string.IsNullOrWhiteSpace(project.Detection.JavaVersionHint))
+        {
+            lines.Add($".java-version: {project.Detection.JavaVersionHint}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(project.Detection.SdkmanJavaVersionHint))
+        {
+            lines.Add($".sdkmanrc java: {project.Detection.SdkmanJavaVersionHint}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(project.Detection.SdkmanMavenVersionHint))
+        {
+            lines.Add($".sdkmanrc maven: {project.Detection.SdkmanMavenVersionHint}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(project.Detection.IdeaProjectJdkName))
+        {
+            lines.Add($"{Localize("IDEA project JDK", "IDEA 项目 JDK")}: {project.Detection.IdeaProjectJdkName}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(project.Detection.MavenWrapperDistributionUrl))
+        {
+            lines.Add($"{Localize("Wrapper distribution", "Wrapper 下载地址")}: {project.Detection.MavenWrapperDistributionUrl}");
+        }
+
+        return string.Join(Environment.NewLine, lines);
+    }
+
+    private string BuildProjectHint(ManagedProject project)
+    {
+        var suggestions = new List<string>();
+        if (!project.Detection.HasPomXml)
+        {
+            suggestions.Add(Localize("No pom.xml was detected. Verify that you selected the real Maven project root.", "没有识别到 pom.xml，请确认你选择的是 Maven 项目根目录。"));
+        }
+
+        if (!project.Detection.HasMavenWrapper)
+        {
+            suggestions.Add(Localize("Consider adding mvnw / mvnw.cmd so IDEA and CI can use the same Maven bootstrap path.", "建议补充 mvnw / mvnw.cmd，让 IDEA 和 CI 使用同一套 Maven 启动方式。"));
+        }
+
+        if (string.IsNullOrWhiteSpace(project.BoundJdkId) || string.IsNullOrWhiteSpace(project.BoundMavenId))
+        {
+            suggestions.Add(Localize("Save the JDK and Maven bindings for this project before applying them globally.", "先为这个项目保存 JDK 和 Maven 绑定，再按需应用到全局环境。"));
+        }
+
+        if (!string.IsNullOrWhiteSpace(project.Detection.IdeaProjectJdkName) && string.IsNullOrWhiteSpace(project.BoundJdkId))
+        {
+            suggestions.Add(Localize("IDEA already exposes a project JDK hint. Match it with a TaoMaster JDK binding to reduce drift.", "IDEA 已经暴露项目 JDK 提示。把它和 TaoMaster 的 JDK 绑定对齐，能减少环境漂移。"));
+        }
+
+        if (suggestions.Count == 0)
+        {
+            suggestions.Add(Localize("Project markers look healthy. Apply the stored bindings before opening or refreshing the IDEA project.", "项目标记看起来正常。打开或刷新 IDEA 项目前，先应用已保存的项目绑定即可。"));
+        }
+
+        return string.Join(Environment.NewLine, suggestions.Select((line, index) => $"{index + 1}. {line}"));
+    }
+
+    private string BuildProjectBindingSummary(ManagedProject project)
+    {
+        var boundJdk = ResolveInstallationById(_state.Jdks, project.BoundJdkId)?.DisplayName ?? _localizer["nonePlaceholder"];
+        var boundMaven = ResolveInstallationById(_state.Mavens, project.BoundMavenId)?.DisplayName ?? _localizer["nonePlaceholder"];
+        var alignmentText = project.BoundJdkId is not null || project.BoundMavenId is not null
+            ? AreProjectBindingsAligned(project, _selectionResolver.Resolve(_state))
+                ? Localize("Current global selection already matches this project.", "当前全局选择已经与该项目一致。")
+                : Localize("Current global selection does not fully match this project yet.", "当前全局选择还没有完全匹配这个项目。")
+            : Localize("No bindings are stored yet.", "当前还没有保存绑定。");
+
+        return string.Join(
+            Environment.NewLine,
+            new[]
+            {
+                $"JDK: {boundJdk}",
+                $"Maven: {boundMaven}",
+                alignmentText
+            });
+    }
+
+    private string BuildProjectDoctorContext(ManagedProject project)
+    {
+        var boundJdk = ResolveInstallationById(_state.Jdks, project.BoundJdkId)?.DisplayName ?? _localizer["nonePlaceholder"];
+        var boundMaven = ResolveInstallationById(_state.Mavens, project.BoundMavenId)?.DisplayName ?? _localizer["nonePlaceholder"];
+
+        return string.Join(
+            Environment.NewLine,
+            new[]
+            {
+                $"{Localize("Project", "项目")}: {project.DisplayName}",
+                $"{Localize("Path", "路径")}: {project.ProjectDirectory}",
+                $"{Localize("Bound JDK", "绑定 JDK")}: {boundJdk}",
+                $"{Localize("Bound Maven", "绑定 Maven")}: {boundMaven}"
+            });
+    }
+
+    private static ManagedInstallation? ResolveInstallationById(IEnumerable<ManagedInstallation> installations, string? installationId) =>
+        string.IsNullOrWhiteSpace(installationId)
+            ? null
+            : installations.FirstOrDefault(installation => installation.Id.Equals(installationId, StringComparison.OrdinalIgnoreCase));
+
+    private bool AreProjectBindingsAligned(ManagedProject project, ActiveToolchainSelection selection) =>
+        (string.IsNullOrWhiteSpace(project.BoundJdkId)
+         || string.Equals(project.BoundJdkId, selection.Jdk?.Id, StringComparison.OrdinalIgnoreCase))
+        && (string.IsNullOrWhiteSpace(project.BoundMavenId)
+            || string.Equals(project.BoundMavenId, selection.Maven?.Id, StringComparison.OrdinalIgnoreCase));
+
+    private string BuildProjectFlag(bool value) =>
+        value ? Localize("Yes", "是") : Localize("No", "否");
+
+    private string BuildEnvironmentSnapshot(ActiveToolchainSelection selection, ManagedProject? project)
     {
         var userJavaHome = _environmentService.GetUserVariable(EnvironmentVariableNames.JavaHome) ?? _localizer["nonePlaceholder"];
         var userMavenHome = _environmentService.GetUserVariable(EnvironmentVariableNames.MavenHome) ?? _localizer["nonePlaceholder"];
@@ -1253,9 +1471,10 @@ public partial class MainWindow : Window
 
         var lines = new List<string>
         {
-            $"{_localizer["snapshotScopeLabel"]}: {_localizer["scopeGlobal"]}",
+            $"{_localizer["snapshotScopeLabel"]}: {(project is null ? _localizer["scopeGlobal"] : _localizer["scopeProject"])}",
             $"{_localizer["snapshotSelectedJdkLabel"]}: {selection.Jdk?.Id ?? _localizer["nonePlaceholder"]}",
             $"{_localizer["snapshotSelectedMavenLabel"]}: {selection.Maven?.Id ?? _localizer["nonePlaceholder"]}",
+            $"{Localize("Selected Project", "选中的项目")}: {project?.DisplayName ?? _localizer["nonePlaceholder"]}",
             $"{_localizer["snapshotJavaHomeLabel"]}: {userJavaHome}",
             $"{_localizer["snapshotMavenHomeLabel"]}: {userMavenHome}",
             $"{_localizer["snapshotM2HomeLabel"]}: {userM2Home}",
@@ -1276,13 +1495,13 @@ public partial class MainWindow : Window
         var firstFailure = _lastDoctorReport.Checks.FirstOrDefault(check => check.Status == DoctorCheckStatus.Fail);
         if (firstFailure is not null)
         {
-            return $"{firstFailure.Code}: {_localizer.GetDoctorMessage(firstFailure.Code, firstFailure.Status)}";
+            return $"{firstFailure.Code}: {GetDoctorMessage(firstFailure)}";
         }
 
         var firstWarning = _lastDoctorReport.Checks.FirstOrDefault(check => check.Status == DoctorCheckStatus.Warn);
         if (firstWarning is not null)
         {
-            return $"{firstWarning.Code}: {_localizer.GetDoctorMessage(firstWarning.Code, firstWarning.Status)}";
+            return $"{firstWarning.Code}: {GetDoctorMessage(firstWarning)}";
         }
 
         return _localizer["dashboardInsightHealthy"];
@@ -1776,6 +1995,20 @@ public partial class MainWindow : Window
         ApplyCurrentSection();
     }
 
+    private void OnProjectSelectionChanged(object sender, WpfSelectionChangedEventArgs e)
+    {
+        if (_suppressProjectSelectionChanged)
+        {
+            return;
+        }
+
+        var selectedProject = ProjectsListBox.SelectedItem as ManagedProject;
+        _state = _projectCatalogService.SetActiveProject(_state, selectedProject?.Id);
+        _stateStore.Save(_layout, _state);
+        InvalidateDoctorOutput();
+        RefreshStateBindings(GetSelectedInstallationId(JdkListBox), GetSelectedInstallationId(MavenListBox), selectedProject?.Id);
+    }
+
     private void OnDiagnosticsNavClicked(object sender, RoutedEventArgs e)
     {
         _currentSection = AppSection.Diagnostics;
@@ -1802,6 +2035,179 @@ public partial class MainWindow : Window
     private void OnBrowseMavenImportClicked(object sender, RoutedEventArgs e)
     {
         BrowseForFolderByKey(MavenImportPathTextBox, "browseMavenDescription");
+    }
+
+    private async void OnImportProjectClicked(object sender, RoutedEventArgs e)
+    {
+        using var dialog = new Forms.FolderBrowserDialog
+        {
+            Description = Localize("Select a Maven or IDEA project directory", "选择 Maven 或 IDEA 项目目录"),
+            ShowNewFolderButton = false,
+            SelectedPath = GetSelectedProject()?.ProjectDirectory ?? string.Empty
+        };
+
+        if (dialog.ShowDialog() != Forms.DialogResult.OK)
+        {
+            return;
+        }
+
+        await ExecuteBusyWithMessageAsync(
+            Localize("Importing the selected project directory...", "正在导入项目目录..."),
+            async () =>
+            {
+                var result = await Task.Run(() => _projectCatalogService.ImportOrRefreshProject(_state, dialog.SelectedPath));
+                _state = result.State;
+                await Task.Run(() => _stateStore.Save(_layout, _state));
+                InvalidateDoctorOutput();
+                RefreshStateBindings(GetSelectedInstallationId(JdkListBox), GetSelectedInstallationId(MavenListBox), result.Project.Id);
+                return FormatLocalized("Project imported: {0}", "已导入项目：{0}", result.Project.DisplayName);
+            });
+    }
+
+    private async void OnRefreshProjectClicked(object sender, RoutedEventArgs e)
+    {
+        if (GetSelectedProject() is not ManagedProject project)
+        {
+            ShowValidationMessage(Localize("Select a project first.", "请先选择一个项目。"));
+            return;
+        }
+
+        await ExecuteBusyWithMessageAsync(
+            Localize("Refreshing project markers and IDEA hints...", "正在刷新项目标记和 IDEA 提示..."),
+            async () =>
+            {
+                var result = await Task.Run(() => _projectCatalogService.RefreshProject(_state, project.Id));
+                _state = result.State;
+                await Task.Run(() => _stateStore.Save(_layout, _state));
+                InvalidateDoctorOutput();
+                RefreshStateBindings(GetSelectedInstallationId(JdkListBox), GetSelectedInstallationId(MavenListBox), result.Project.Id);
+                return FormatLocalized("Project markers refreshed: {0}", "已刷新项目标记：{0}", result.Project.DisplayName);
+            });
+    }
+
+    private void OnOpenProjectFolderClicked(object sender, RoutedEventArgs e)
+    {
+        var project = GetSelectedProject();
+        if (project is null || !System.IO.Directory.Exists(project.ProjectDirectory))
+        {
+            ShowValidationMessage(Localize("Select a project with a valid directory first.", "请先选择一个目录有效的项目。"));
+            return;
+        }
+
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = project.ProjectDirectory,
+            UseShellExecute = true
+        });
+
+        SetStatus(FormatLocalized("Opened project folder: {0}", "已打开项目目录：{0}", project.DisplayName));
+    }
+
+    private async void OnRemoveProjectClicked(object sender, RoutedEventArgs e)
+    {
+        if (GetSelectedProject() is not ManagedProject project)
+        {
+            ShowValidationMessage(Localize("Select a project first.", "请先选择一个项目。"));
+            return;
+        }
+
+        var confirmed = System.Windows.MessageBox.Show(
+            this,
+            FormatLocalized(
+                "Remove project '{0}' from TaoMaster? The project files on disk will not be deleted.",
+                "要从 TaoMaster 中移除项目“{0}”吗？磁盘上的项目文件不会被删除。",
+                project.DisplayName),
+            _localizer["warningTitle"],
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning) == MessageBoxResult.Yes;
+
+        if (!confirmed)
+        {
+            return;
+        }
+
+        await ExecuteBusyWithMessageAsync(
+            Localize("Removing the selected project from TaoMaster state...", "正在从 TaoMaster 状态中移除项目..."),
+            async () =>
+            {
+                _state = await Task.Run(() => _projectCatalogService.RemoveProject(_state, project.Id));
+                await Task.Run(() => _stateStore.Save(_layout, _state));
+                InvalidateDoctorOutput();
+                RefreshStateBindings(GetSelectedInstallationId(JdkListBox), GetSelectedInstallationId(MavenListBox), _state.ActiveProjectId);
+                return FormatLocalized("Removed project: {0}", "已移除项目：{0}", project.DisplayName);
+            });
+    }
+
+    private async void OnSaveProjectBindingClicked(object sender, RoutedEventArgs e)
+    {
+        if (GetSelectedProject() is not ManagedProject project)
+        {
+            ShowValidationMessage(Localize("Select a project first.", "请先选择一个项目。"));
+            return;
+        }
+
+        await ExecuteBusyWithMessageAsync(
+            Localize("Saving the project-level JDK and Maven bindings...", "正在保存项目级 JDK / Maven 绑定..."),
+            async () =>
+            {
+                var boundJdkId = (ProjectJdkComboBox.SelectedItem as ManagedInstallation)?.Id;
+                var boundMavenId = (ProjectMavenComboBox.SelectedItem as ManagedInstallation)?.Id;
+                var result = await Task.Run(() => _projectCatalogService.UpdateBindings(_state, project.Id, boundJdkId, boundMavenId));
+                _state = result.State;
+                await Task.Run(() => _stateStore.Save(_layout, _state));
+                InvalidateDoctorOutput();
+                RefreshStateBindings(GetSelectedInstallationId(JdkListBox), GetSelectedInstallationId(MavenListBox), result.Project.Id);
+                return FormatLocalized("Saved project bindings: {0}", "已保存项目绑定：{0}", result.Project.DisplayName);
+            });
+    }
+
+    private async void OnApplyProjectBindingClicked(object sender, RoutedEventArgs e)
+    {
+        if (GetSelectedProject() is not ManagedProject project)
+        {
+            ShowValidationMessage(Localize("Select a project first.", "请先选择一个项目。"));
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(project.BoundJdkId) && string.IsNullOrWhiteSpace(project.BoundMavenId))
+        {
+            ShowValidationMessage(Localize("Save at least one JDK or Maven binding for the project first.", "请先为项目保存至少一个 JDK 或 Maven 绑定。"));
+            return;
+        }
+
+        await ExecuteBusyWithMessageAsync(
+            Localize("Applying the selected project's bindings to the current environment...", "正在把项目绑定应用到当前环境..."),
+            async () =>
+            {
+                var result = await Task.Run(() => _projectCatalogService.ApplyProjectBindings(_state, project.Id));
+                _state = result.State;
+                await Task.Run(() => _stateStore.Save(_layout, _state));
+                await Task.Run(() => ApplyActivationWithShellIntegration(_state));
+                InvalidateDoctorOutput();
+                RefreshStateBindings(_state.ActiveSelection.JdkId, _state.ActiveSelection.MavenId, result.Project.Id);
+                return FormatLocalized("Applied project bindings: {0}", "已应用项目绑定：{0}", result.Project.DisplayName);
+            });
+    }
+
+    private async void OnClearProjectBindingClicked(object sender, RoutedEventArgs e)
+    {
+        if (GetSelectedProject() is not ManagedProject project)
+        {
+            ShowValidationMessage(Localize("Select a project first.", "请先选择一个项目。"));
+            return;
+        }
+
+        await ExecuteBusyWithMessageAsync(
+            Localize("Saving the project-level JDK and Maven bindings...", "正在保存项目级 JDK / Maven 绑定..."),
+            async () =>
+            {
+                var result = await Task.Run(() => _projectCatalogService.UpdateBindings(_state, project.Id, null, null));
+                _state = result.State;
+                await Task.Run(() => _stateStore.Save(_layout, _state));
+                InvalidateDoctorOutput();
+                RefreshStateBindings(GetSelectedInstallationId(JdkListBox), GetSelectedInstallationId(MavenListBox), result.Project.Id);
+                return FormatLocalized("Cleared project bindings: {0}", "已清空项目绑定：{0}", result.Project.DisplayName);
+            });
     }
 
     private void OnBrowseMavenSettingsFileClicked(object sender, RoutedEventArgs e)
@@ -3262,7 +3668,7 @@ public partial class MainWindow : Window
             "busyRunningDoctor",
             async () =>
             {
-                _lastDoctorReport = await Task.Run(() => _doctorService.Run(_state));
+                _lastDoctorReport = await Task.Run(() => _doctorService.Run(_state, GetSelectedProject()));
                 DoctorOutputTextBox.Text = BuildDoctorOutput(_lastDoctorReport);
                 RefreshEnvironmentHealth(_selectionResolver.Resolve(_state));
 
@@ -3292,7 +3698,7 @@ public partial class MainWindow : Window
                     ApplyActivationWithShellIntegration(_state);
                 });
 
-                _lastDoctorReport = await Task.Run(() => _doctorService.Run(_state));
+                _lastDoctorReport = await Task.Run(() => _doctorService.Run(_state, GetSelectedProject()));
                 RefreshStateBindings(GetSelectedInstallationId(JdkListBox), GetSelectedInstallationId(MavenListBox));
 
                 return result.Changed
@@ -3578,6 +3984,7 @@ public partial class MainWindow : Window
     private string BuildDoctorOutput(DoctorReport report)
     {
         var selection = _selectionResolver.Resolve(_state);
+        var project = GetSelectedProject();
         var userJavaHome = _environmentService.GetUserVariable(EnvironmentVariableNames.JavaHome);
         var userMavenHome = _environmentService.GetUserVariable(EnvironmentVariableNames.MavenHome);
         var userM2Home = _environmentService.GetUserVariable(EnvironmentVariableNames.M2Home);
@@ -3599,9 +4006,16 @@ public partial class MainWindow : Window
             string.Empty
         };
 
+        if (project is not null)
+        {
+            lines.Add($"{Localize("Project", "项目")}: {project.DisplayName}");
+            lines.Add($"{Localize("Path", "路径")}: {project.ProjectDirectory}");
+            lines.Add(string.Empty);
+        }
+
         foreach (var check in report.Checks)
         {
-            lines.Add($"[{check.Status.ToString().ToUpperInvariant()}] {check.Code} - {_localizer.GetDoctorMessage(check.Code, check.Status)}");
+            lines.Add($"[{check.Status.ToString().ToUpperInvariant()}] {check.Code} - {GetDoctorMessage(check)}");
 
             foreach (var detailLine in BuildDoctorDetailLines(
                          check,
@@ -3770,6 +4184,81 @@ public partial class MainWindow : Window
         };
         formattedLines.AddRange(lines);
         return formattedLines;
+    }
+
+    private string GetDoctorMessage(DoctorCheck check)
+    {
+        var localized = _localizer.GetDoctorMessage(check.Code, check.Status);
+        if (!localized.StartsWith("doctor.", StringComparison.OrdinalIgnoreCase))
+        {
+            return localized;
+        }
+
+        return check.Code switch
+        {
+            "project-directory" => Localize(
+                check.Status == DoctorCheckStatus.Fail
+                    ? "The selected project directory is missing."
+                    : "The selected project directory is available.",
+                check.Status == DoctorCheckStatus.Fail
+                    ? "当前选中的项目目录不存在。"
+                    : "当前选中的项目目录可用。"),
+            "project-pom" => Localize(
+                check.Status == DoctorCheckStatus.Pass
+                    ? "pom.xml was detected in the selected project."
+                    : "pom.xml was not detected in the selected project.",
+                check.Status == DoctorCheckStatus.Pass
+                    ? "当前选中的项目中识别到了 pom.xml。"
+                    : "当前选中的项目中没有识别到 pom.xml。"),
+            "project-wrapper" => Localize(
+                check.Status == DoctorCheckStatus.Pass
+                    ? "A Maven wrapper was detected for the selected project."
+                    : "No Maven wrapper was detected for the selected project.",
+                check.Status == DoctorCheckStatus.Pass
+                    ? "当前选中的项目中识别到了 Maven Wrapper。"
+                    : "当前选中的项目中没有识别到 Maven Wrapper。"),
+            "project-idea" => Localize(
+                check.Status == DoctorCheckStatus.Pass
+                    ? "The selected project contains IntelliJ IDEA metadata."
+                    : "The selected project does not contain an .idea directory.",
+                check.Status == DoctorCheckStatus.Pass
+                    ? "当前选中的项目包含 IntelliJ IDEA 元数据。"
+                    : "当前选中的项目不包含 .idea 目录。"),
+            "project-jdk-binding" => Localize(
+                check.Status switch
+                {
+                    DoctorCheckStatus.Pass => "The project JDK binding is available and aligned.",
+                    DoctorCheckStatus.Fail => "The project JDK binding points to a missing installation.",
+                    _ => "The project JDK binding is missing or differs from the current selection."
+                },
+                check.Status switch
+                {
+                    DoctorCheckStatus.Pass => "项目 JDK 绑定可用且已对齐。",
+                    DoctorCheckStatus.Fail => "项目 JDK 绑定指向了不存在的安装。",
+                    _ => "项目 JDK 绑定缺失，或与当前选择不一致。"
+                }),
+            "project-maven-binding" => Localize(
+                check.Status switch
+                {
+                    DoctorCheckStatus.Pass => "The project Maven binding is available and aligned.",
+                    DoctorCheckStatus.Fail => "The project Maven binding points to a missing installation.",
+                    _ => "The project Maven binding is missing or differs from the current selection."
+                },
+                check.Status switch
+                {
+                    DoctorCheckStatus.Pass => "项目 Maven 绑定可用且已对齐。",
+                    DoctorCheckStatus.Fail => "项目 Maven 绑定指向了不存在的安装。",
+                    _ => "项目 Maven 绑定缺失，或与当前选择不一致。"
+                }),
+            "idea-jdk-hint" => Localize(
+                check.Status == DoctorCheckStatus.Pass
+                    ? "The IntelliJ IDEA project JDK hint was detected."
+                    : "The IntelliJ IDEA project JDK hint was not found in .idea/misc.xml.",
+                check.Status == DoctorCheckStatus.Pass
+                    ? "已经识别到 IntelliJ IDEA 的项目 JDK 提示。"
+                    : "在 .idea/misc.xml 中没有识别到 IntelliJ IDEA 的项目 JDK 提示。"),
+            _ => check.Message
+        };
     }
 
     private static string? GetSelectedInstallationId(WpfListBox listBox) =>

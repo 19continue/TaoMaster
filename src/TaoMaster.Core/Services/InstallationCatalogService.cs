@@ -7,10 +7,12 @@ namespace TaoMaster.Core.Services;
 public sealed class InstallationCatalogService
 {
     private readonly InstallationInspector _inspector;
+    private readonly ProjectCatalogService _projectCatalogService;
 
     public InstallationCatalogService(InstallationInspector inspector)
     {
         _inspector = inspector;
+        _projectCatalogService = new ProjectCatalogService();
     }
 
     public ManagerState MergeDiscovered(ManagerState state, DiscoverySnapshot snapshot)
@@ -18,12 +20,12 @@ public sealed class InstallationCatalogService
         var jdks = MergeInstallations(state.Jdks, snapshot.Jdks);
         var mavens = MergeInstallations(state.Mavens, snapshot.Mavens);
 
-        return state with
+        return _projectCatalogService.NormalizeProjects(state with
         {
             Jdks = jdks,
             Mavens = mavens,
             ActiveSelection = NormalizeSelection(state.ActiveSelection, jdks, mavens)
-        };
+        });
     }
 
     public (ManagerState State, ManagedInstallation Installation) ImportInstallation(
@@ -57,7 +59,7 @@ public sealed class InstallationCatalogService
     }
 
     public ManagerState RegisterInstallation(ManagerState state, ManagedInstallation installation) =>
-        installation.Kind switch
+        _projectCatalogService.NormalizeProjects(installation.Kind switch
         {
             ToolchainKind.Jdk => state with
             {
@@ -76,7 +78,7 @@ public sealed class InstallationCatalogService
                     MergeInstallations(state.Mavens, new[] { installation }))
             },
             _ => state
-        };
+        });
 
     public InstallationRemovalResult RemoveInstallation(
         ManagerState state,
@@ -128,7 +130,7 @@ public sealed class InstallationCatalogService
             _ => state
         };
 
-        return new InstallationRemovalResult(updatedState, installation, deleteFiles);
+        return new InstallationRemovalResult(_projectCatalogService.NormalizeProjects(updatedState), installation, deleteFiles);
     }
 
     private static IReadOnlyList<ManagedInstallation> MergeInstallations(
@@ -188,26 +190,26 @@ public sealed class InstallationCatalogService
         }
     }
 
-    private static ManagerState BuildImportedJdkState(ManagerState state, ManagedInstallation installation)
+    private ManagerState BuildImportedJdkState(ManagerState state, ManagedInstallation installation)
     {
         var jdks = MergeInstallations(state.Jdks, new[] { installation });
 
-        return state with
+        return _projectCatalogService.NormalizeProjects(state with
         {
             Jdks = jdks,
             ActiveSelection = NormalizeSelection(state.ActiveSelection, jdks, state.Mavens)
-        };
+        });
     }
 
-    private static ManagerState BuildImportedMavenState(ManagerState state, ManagedInstallation installation)
+    private ManagerState BuildImportedMavenState(ManagerState state, ManagedInstallation installation)
     {
         var mavens = MergeInstallations(state.Mavens, new[] { installation });
 
-        return state with
+        return _projectCatalogService.NormalizeProjects(state with
         {
             Mavens = mavens,
             ActiveSelection = NormalizeSelection(state.ActiveSelection, state.Jdks, mavens)
-        };
+        });
     }
 
     private static ManagedInstallation FindInstallation(ManagerState state, ToolchainKind kind, string id)

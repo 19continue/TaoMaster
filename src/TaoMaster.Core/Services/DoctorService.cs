@@ -18,7 +18,9 @@ public sealed class DoctorService
         _environmentService = environmentService;
     }
 
-    public DoctorReport Run(ManagerState state)
+    public DoctorReport Run(ManagerState state) => Run(state, null);
+
+    public DoctorReport Run(ManagerState state, ManagedProject? project)
     {
         var checks = new List<DoctorCheck>();
         var selection = _selectionResolver.Resolve(state);
@@ -129,6 +131,11 @@ public sealed class DoctorService
                     probe.Output));
         }
 
+        if (project is not null)
+        {
+            AddProjectChecks(checks, state, selection, project);
+        }
+
         return new DoctorReport(checks);
     }
 
@@ -148,6 +155,97 @@ public sealed class DoctorService
             : selection.Maven is not null
                 ? new DoctorCheck(DoctorCheckStatus.Pass, "selected-maven", "Active Maven selection is valid.", selection.Maven.DisplayName)
                 : new DoctorCheck(DoctorCheckStatus.Fail, "selected-maven", "The saved Maven selection points to a missing installation.", state.ActiveSelection.MavenId));
+    }
+
+    private static void AddProjectChecks(
+        ICollection<DoctorCheck> checks,
+        ManagerState state,
+        ActiveToolchainSelection selection,
+        ManagedProject project)
+    {
+        checks.Add(Directory.Exists(project.ProjectDirectory)
+            ? new DoctorCheck(DoctorCheckStatus.Pass, "project-directory", "The selected project directory is available.", project.ProjectDirectory)
+            : new DoctorCheck(DoctorCheckStatus.Fail, "project-directory", "The selected project directory is missing.", project.ProjectDirectory));
+
+        checks.Add(project.Detection.HasPomXml
+            ? new DoctorCheck(DoctorCheckStatus.Pass, "project-pom", "pom.xml was detected in the selected project.", project.ProjectDirectory)
+            : new DoctorCheck(DoctorCheckStatus.Warn, "project-pom", "pom.xml was not detected in the selected project.", project.ProjectDirectory));
+
+        checks.Add(project.Detection.HasMavenWrapper
+            ? new DoctorCheck(DoctorCheckStatus.Pass, "project-wrapper", "A Maven wrapper was detected for the selected project.", project.Detection.MavenWrapperDistributionUrl)
+            : new DoctorCheck(DoctorCheckStatus.Warn, "project-wrapper", "No Maven wrapper was detected for the selected project."));
+
+        checks.Add(project.Detection.HasIdeaDirectory
+            ? new DoctorCheck(DoctorCheckStatus.Pass, "project-idea", "The selected project contains IntelliJ IDEA metadata.", project.Detection.IdeaProjectJdkName)
+            : new DoctorCheck(DoctorCheckStatus.Warn, "project-idea", "The selected project does not contain an .idea directory."));
+
+        checks.Add(BuildProjectBindingCheck(
+            "project-jdk-binding",
+            "JDK",
+            project.BoundJdkId,
+            state.Jdks,
+            selection.Jdk?.Id));
+
+        checks.Add(BuildProjectBindingCheck(
+            "project-maven-binding",
+            "Maven",
+            project.BoundMavenId,
+            state.Mavens,
+            selection.Maven?.Id));
+
+        if (project.Detection.HasIdeaDirectory)
+        {
+            checks.Add(!string.IsNullOrWhiteSpace(project.Detection.IdeaProjectJdkName)
+                ? new DoctorCheck(
+                    DoctorCheckStatus.Pass,
+                    "idea-jdk-hint",
+                    "The IntelliJ IDEA project JDK hint was detected.",
+                    project.Detection.IdeaProjectJdkName)
+                : new DoctorCheck(
+                    DoctorCheckStatus.Warn,
+                    "idea-jdk-hint",
+                    "The IntelliJ IDEA project JDK hint was not found in .idea/misc.xml."));
+        }
+    }
+
+    private static DoctorCheck BuildProjectBindingCheck(
+        string code,
+        string label,
+        string? boundInstallationId,
+        IReadOnlyList<ManagedInstallation> installations,
+        string? selectedInstallationId)
+    {
+        if (string.IsNullOrWhiteSpace(boundInstallationId))
+        {
+            return new DoctorCheck(DoctorCheckStatus.Warn, code, $"No project {label} binding is stored in TaoMaster.");
+        }
+
+        var installation = installations.FirstOrDefault(item => item.Id.Equals(boundInstallationId, StringComparison.OrdinalIgnoreCase));
+        if (installation is null)
+        {
+            return new DoctorCheck(
+                DoctorCheckStatus.Fail,
+                code,
+                $"The project {label} binding points to a missing installation.",
+                boundInstallationId);
+        }
+
+        var detail = $"{installation.DisplayName}{Environment.NewLine}{installation.HomeDirectory}";
+        if (!string.IsNullOrWhiteSpace(selectedInstallationId)
+            && !installation.Id.Equals(selectedInstallationId, StringComparison.OrdinalIgnoreCase))
+        {
+            return new DoctorCheck(
+                DoctorCheckStatus.Warn,
+                code,
+                $"The project {label} binding differs from the current active selection.",
+                detail);
+        }
+
+        return new DoctorCheck(
+            DoctorCheckStatus.Pass,
+            code,
+            $"The project {label} binding is available and aligned.",
+            detail);
     }
 
     private static DoctorCheck ResolvedExecutableCheck(

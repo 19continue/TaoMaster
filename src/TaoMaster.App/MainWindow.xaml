@@ -1132,74 +1132,225 @@
                 <ScrollViewer x:Name="ProjectsPage"
                               Visibility="Collapsed"
                               VerticalScrollBarVisibility="Auto">
-                    <StackPanel>
-                        <Border Style="{StaticResource CardStyle}">
-                            <StackPanel>
-                                <TextBlock Tag="projectsStatusTitle"
-                                           Style="{StaticResource SectionTitleStyle}"
-                                           Text="Project Scope" />
-                                <TextBlock Margin="0,10,0,16"
-                                           Tag="projectsStatusDescription"
-                                           Style="{StaticResource BodyTextStyle}"
-                                           Text="Project-level rules will live here. Today, TaoMaster applies switching at global scope and session scope only." />
-                                <WrapPanel>
-                                    <Border Margin="0,0,10,10"
-                                            Padding="10,6"
-                                            CornerRadius="999"
-                                            Background="{StaticResource AccentSoftBrush}">
-                                        <TextBlock Tag="scopeGlobal"
-                                                   Foreground="{StaticResource AccentBrush}"
-                                                   FontWeight="SemiBold"
-                                                   Text="Global" />
-                                    </Border>
-                                    <Border Margin="0,0,10,10"
-                                            Padding="10,6"
-                                            CornerRadius="999"
-                                            Background="#ECEFF1">
-                                        <TextBlock Tag="scopeProject"
-                                                   Foreground="{StaticResource MutedBrush}"
-                                                   FontWeight="SemiBold"
-                                                   Text="Project" />
-                                    </Border>
-                                    <Border Margin="0,0,10,10"
-                                            Padding="10,6"
-                                            CornerRadius="999"
-                                            Background="#ECEFF1">
-                                        <TextBlock Tag="scopeSession"
-                                                   Foreground="{StaticResource MutedBrush}"
-                                                   FontWeight="SemiBold"
-                                                   Text="Session" />
-                                    </Border>
-                                </WrapPanel>
-                                <TextBlock x:Name="ProjectsScopeTextBlock"
-                                           Margin="0,6,0,0"
-                                           FontSize="20"
-                                           FontWeight="SemiBold"
-                                           Foreground="{StaticResource InkBrush}"
-                                           Text="Global switching is active." />
-                                <TextBlock x:Name="ProjectsScopeDetailTextBlock"
-                                           Margin="0,10,0,0"
-                                           Style="{StaticResource BodyTextStyle}" />
-                            </StackPanel>
-                        </Border>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="1.02*" />
+                            <ColumnDefinition Width="0.98*" />
+                        </Grid.ColumnDefinitions>
 
-                        <Border Style="{StaticResource CardStyle}">
-                            <StackPanel>
-                                <TextBlock Tag="projectsRulesTitle"
-                                           Style="{StaticResource SectionTitleStyle}"
-                                           Text="Planned Rule Sources" />
-                                <TextBlock Margin="0,10,0,14"
-                                           Tag="projectsRulesDescription"
-                                           Style="{StaticResource BodyTextStyle}"
-                                           Text="This page will eventually detect version hints from common Java project files and apply project-local routing." />
-                                <TextBlock x:Name="ProjectsRulesTextBlock"
-                                           FontFamily="Consolas"
-                                           FontSize="12.5"
-                                           Foreground="{StaticResource InkBrush}"
-                                           TextWrapping="Wrap" />
-                            </StackPanel>
-                        </Border>
-                    </StackPanel>
+                        <StackPanel Margin="0,0,18,0">
+                            <Border Style="{StaticResource CardStyle}">
+                                <StackPanel>
+                                    <TextBlock x:Name="ProjectsLibraryTitleTextBlock"
+                                               Tag="projectsLibraryTitle"
+                                               Style="{StaticResource SectionTitleStyle}"
+                                               Text="Project Library" />
+                                    <TextBlock x:Name="ProjectsLibraryDescriptionTextBlock"
+                                               Margin="0,10,0,14"
+                                               Tag="projectsLibraryDescription"
+                                               Style="{StaticResource BodyTextStyle}"
+                                               Text="Import a project directory, keep its detection markers fresh, and store the JDK/Maven pair you want IDEA work to align with." />
+                                    <WrapPanel>
+                                        <Button x:Name="ImportProjectButton"
+                                                Tag="projectsImportButton"
+                                                Content="Import Project"
+                                                Style="{StaticResource ActionButtonStyle}"
+                                                Click="OnImportProjectClicked" />
+                                        <Button x:Name="RefreshProjectButton"
+                                                Tag="projectsRefreshButton"
+                                                Content="Refresh Project"
+                                                Style="{StaticResource SecondaryButtonStyle}"
+                                                Click="OnRefreshProjectClicked" />
+                                        <Button x:Name="OpenProjectFolderButton"
+                                                Tag="projectsOpenFolderButton"
+                                                Content="Open Folder"
+                                                Style="{StaticResource SecondaryButtonStyle}"
+                                                Click="OnOpenProjectFolderClicked" />
+                                        <Button x:Name="RemoveProjectButton"
+                                                Tag="projectsRemoveButton"
+                                                Content="Remove Project"
+                                                Style="{StaticResource SecondaryButtonStyle}"
+                                                Click="OnRemoveProjectClicked" />
+                                    </WrapPanel>
+                                    <ListBox x:Name="ProjectsListBox"
+                                             Margin="0,14,0,0"
+                                             BorderThickness="0"
+                                             Background="Transparent"
+                                             ItemContainerStyle="{StaticResource SelectablePanelListItemStyle}"
+                                             SelectionChanged="OnProjectSelectionChanged"
+                                             PreviewMouseWheel="OnEmbeddedListPreviewMouseWheel">
+                                        <ListBox.ItemTemplate>
+                                            <DataTemplate>
+                                                <StackPanel Margin="0,4,0,4">
+                                                    <TextBlock FontSize="15"
+                                                               FontWeight="SemiBold"
+                                                               Foreground="{StaticResource InkBrush}"
+                                                               Text="{Binding DisplayName}" />
+                                                    <TextBlock Margin="0,6,0,0"
+                                                               FontFamily="Consolas"
+                                                               FontSize="12.5"
+                                                               Foreground="{StaticResource MutedBrush}"
+                                                               TextWrapping="Wrap"
+                                                               Text="{Binding ProjectDirectory}" />
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ListBox.ItemTemplate>
+                                    </ListBox>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Style="{StaticResource CardStyle}">
+                                <StackPanel>
+                                    <TextBlock x:Name="ProjectsDetectionTitleTextBlock"
+                                               Tag="projectsDetectionTitle"
+                                               Style="{StaticResource SectionTitleStyle}"
+                                               Text="Detected Project Markers" />
+                                    <TextBlock x:Name="ProjectsDetectionDescriptionTextBlock"
+                                               Margin="0,10,0,14"
+                                               Tag="projectsDetectionDescription"
+                                               Style="{StaticResource BodyTextStyle}"
+                                               Text="TaoMaster inspects Maven wrapper files, IDEA metadata, .java-version, and .sdkmanrc hints so you can compare project intent with your selected toolchain." />
+                                    <TextBox x:Name="ProjectDetectionTextBox"
+                                             MinHeight="220"
+                                             FontFamily="Consolas"
+                                             FontSize="12.5"
+                                             IsReadOnly="True"
+                                             TextWrapping="Wrap"
+                                             VerticalScrollBarVisibility="Auto"
+                                             AcceptsReturn="True"
+                                             Background="{StaticResource SurfaceBrush}"
+                                             BorderBrush="{StaticResource SoftLineBrush}"
+                                             BorderThickness="1"
+                                             Padding="14" />
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="1">
+                            <Border Style="{StaticResource CardStyle}">
+                                <StackPanel>
+                                    <TextBlock x:Name="ProjectsDetailTitleTextBlock"
+                                               Tag="projectsDetailTitle"
+                                               Style="{StaticResource SectionTitleStyle}"
+                                               Text="Project Details" />
+                                    <TextBlock x:Name="ProjectsDetailDescriptionTextBlock"
+                                               Margin="0,10,0,14"
+                                               Tag="projectsDetailDescription"
+                                               Style="{StaticResource BodyTextStyle}"
+                                               Text="Review the selected project path, latest scan time, and the most relevant IDEA / Maven hints before you save bindings." />
+
+                                    <TextBlock x:Name="ProjectsNameLabelTextBlock"
+                                               Tag="projectsNameLabel"
+                                               FontWeight="SemiBold"
+                                               Foreground="{StaticResource InkBrush}"
+                                               Text="Project Name" />
+                                    <TextBlock x:Name="ProjectNameTextBlock"
+                                               Margin="0,8,0,0"
+                                               FontSize="18"
+                                               FontWeight="SemiBold"
+                                               Foreground="{StaticResource InkBrush}"
+                                               Text="(none)" />
+
+                                    <TextBlock x:Name="ProjectsPathLabelTextBlock"
+                                               Tag="projectsPathLabel"
+                                               Margin="0,16,0,0"
+                                               FontWeight="SemiBold"
+                                               Foreground="{StaticResource InkBrush}"
+                                               Text="Project Path" />
+                                    <TextBlock x:Name="ProjectPathTextBlock"
+                                               Margin="0,8,0,0"
+                                               FontFamily="Consolas"
+                                               FontSize="12.5"
+                                               TextWrapping="Wrap"
+                                               Text="(none)" />
+
+                                    <TextBlock x:Name="ProjectsLastScannedLabelTextBlock"
+                                               Tag="projectsLastScannedLabel"
+                                               Margin="0,16,0,0"
+                                               FontWeight="SemiBold"
+                                               Foreground="{StaticResource InkBrush}"
+                                               Text="Last Scanned" />
+                                    <TextBlock x:Name="ProjectLastScannedTextBlock"
+                                               Margin="0,8,0,0"
+                                               Style="{StaticResource BodyTextStyle}"
+                                               Text="(none)" />
+
+                                    <TextBlock x:Name="ProjectsHintsLabelTextBlock"
+                                               Tag="projectsHintsLabel"
+                                               Margin="0,16,0,0"
+                                               FontWeight="SemiBold"
+                                               Foreground="{StaticResource InkBrush}"
+                                               Text="Suggested Next Step" />
+                                    <TextBlock x:Name="ProjectHintTextBlock"
+                                               Margin="0,8,0,0"
+                                               Style="{StaticResource BodyTextStyle}"
+                                               TextWrapping="Wrap"
+                                               Text="Select a project to view suggestions." />
+                                </StackPanel>
+                            </Border>
+
+                            <Border Style="{StaticResource CardStyle}">
+                                <StackPanel>
+                                    <TextBlock x:Name="ProjectsBindingTitleTextBlock"
+                                               Tag="projectsBindingTitle"
+                                               Style="{StaticResource SectionTitleStyle}"
+                                               Text="Project Bindings" />
+                                    <TextBlock x:Name="ProjectsBindingDescriptionTextBlock"
+                                               Margin="0,10,0,14"
+                                               Tag="projectsBindingDescription"
+                                               Style="{StaticResource BodyTextStyle}"
+                                               Text="Store the JDK and Maven pair this project should use, then apply the pair to the current global environment when needed." />
+
+                                    <TextBlock x:Name="ProjectsBoundJdkLabelTextBlock"
+                                               Tag="projectsBoundJdkLabel"
+                                               FontWeight="SemiBold"
+                                               Foreground="{StaticResource InkBrush}"
+                                               Text="Bound JDK" />
+                                    <ComboBox x:Name="ProjectJdkComboBox"
+                                              Margin="0,8,0,0"
+                                              Height="38"
+                                              PreviewMouseWheel="OnComboBoxPreviewMouseWheel"
+                                              Style="{StaticResource InputComboBoxStyle}" />
+
+                                    <TextBlock x:Name="ProjectsBoundMavenLabelTextBlock"
+                                               Tag="projectsBoundMavenLabel"
+                                               Margin="0,16,0,0"
+                                               FontWeight="SemiBold"
+                                               Foreground="{StaticResource InkBrush}"
+                                               Text="Bound Maven" />
+                                    <ComboBox x:Name="ProjectMavenComboBox"
+                                              Margin="0,8,0,0"
+                                              Height="38"
+                                              PreviewMouseWheel="OnComboBoxPreviewMouseWheel"
+                                              Style="{StaticResource InputComboBoxStyle}" />
+
+                                    <WrapPanel Margin="0,16,0,0">
+                                        <Button x:Name="SaveProjectBindingButton"
+                                                Tag="projectsSaveBindingButton"
+                                                Content="Save Bindings"
+                                                Style="{StaticResource ActionButtonStyle}"
+                                                Click="OnSaveProjectBindingClicked" />
+                                        <Button x:Name="ApplyProjectBindingButton"
+                                                Tag="projectsApplyBindingButton"
+                                                Content="Apply Project Bindings"
+                                                Style="{StaticResource SecondaryButtonStyle}"
+                                                Click="OnApplyProjectBindingClicked" />
+                                        <Button x:Name="ClearProjectBindingButton"
+                                                Tag="projectsClearBindingButton"
+                                                Content="Clear Bindings"
+                                                Style="{StaticResource SecondaryButtonStyle}"
+                                                Click="OnClearProjectBindingClicked" />
+                                    </WrapPanel>
+
+                                    <TextBlock x:Name="ProjectBindingStatusTextBlock"
+                                               Margin="0,12,0,0"
+                                               Style="{StaticResource BodyTextStyle}"
+                                               TextWrapping="Wrap"
+                                               Text="Select a project to configure its bindings." />
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </Grid>
                 </ScrollViewer>
                 <ScrollViewer x:Name="DiagnosticsPage"
                               Visibility="Collapsed"
@@ -1234,6 +1385,17 @@
                                                 Style="{StaticResource SecondaryButtonStyle}"
                                                 Click="OnCopyMachinePathScriptClicked" />
                                     </WrapPanel>
+                                    <TextBlock x:Name="DiagnosticsSelectedProjectLabelTextBlock"
+                                               Tag="diagnosticsSelectedProjectLabel"
+                                               Margin="0,14,0,0"
+                                               FontWeight="SemiBold"
+                                               Foreground="{StaticResource InkBrush}"
+                                               Text="Project Context" />
+                                    <TextBlock x:Name="DoctorProjectContextTextBlock"
+                                               Margin="0,8,0,14"
+                                               Style="{StaticResource BodyTextStyle}"
+                                               TextWrapping="Wrap"
+                                               Text="Doctor is currently scoped to environment checks only." />
                                     <Grid Margin="0,4,0,14">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="1*" />

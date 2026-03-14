@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using TaoMaster.Core.Models;
 using TaoMaster.Core.Services;
+using TaoMaster.Core.Utilities;
 
 namespace TaoMaster.Core.State;
 
@@ -106,6 +107,26 @@ public sealed class ManagerStateStore
         var normalizedPreferredMavenDownloadSourceId = string.IsNullOrWhiteSpace(settings.PreferredMavenDownloadSourceId)
             ? "apache-official"
             : settings.PreferredMavenDownloadSourceId.Trim();
+        var normalizedProjects = (state.Projects ?? Array.Empty<ManagedProject>())
+            .Where(project => !string.IsNullOrWhiteSpace(project.Id) && !string.IsNullOrWhiteSpace(project.ProjectDirectory))
+            .Select(project =>
+            {
+                var normalizedProjectDirectory = PathUtilities.NormalizePath(project.ProjectDirectory);
+                return project with
+                {
+                    ProjectDirectory = normalizedProjectDirectory,
+                    DisplayName = string.IsNullOrWhiteSpace(project.DisplayName)
+                        ? Path.GetFileName(normalizedProjectDirectory)
+                        : project.DisplayName,
+                    Detection = project.Detection ?? ProjectDetectionSnapshot.Empty
+                };
+            })
+            .OrderBy(project => project.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(project => project.ProjectDirectory, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var normalizedActiveProjectId = normalizedProjects.Any(project => project.Id.Equals(state.ActiveProjectId, StringComparison.OrdinalIgnoreCase))
+            ? state.ActiveProjectId
+            : normalizedProjects.FirstOrDefault()?.Id;
 
         if (normalizedPathMode == settings.PathMode
             && normalizedInstallRoot == settings.InstallRoot
@@ -121,7 +142,9 @@ public sealed class ManagerStateStore
             && normalizedCustomJdkDownloadSources.SequenceEqual(settings.CustomJdkDownloadSources ?? Array.Empty<JdkDownloadSourceConfiguration>())
             && normalizedPreferredJdkDownloadSourceId == settings.PreferredJdkDownloadSourceId
             && normalizedCustomDownloadSources.SequenceEqual(settings.CustomMavenDownloadSources ?? Array.Empty<MavenDownloadSourceConfiguration>())
-            && normalizedPreferredMavenDownloadSourceId == settings.PreferredMavenDownloadSourceId)
+            && normalizedPreferredMavenDownloadSourceId == settings.PreferredMavenDownloadSourceId
+            && normalizedProjects.SequenceEqual(state.Projects ?? Array.Empty<ManagedProject>())
+            && normalizedActiveProjectId == state.ActiveProjectId)
         {
             return state;
         }
@@ -145,7 +168,9 @@ public sealed class ManagerStateStore
                 PreferredJdkDownloadSourceId = normalizedPreferredJdkDownloadSourceId,
                 CustomMavenDownloadSources = normalizedCustomDownloadSources,
                 PreferredMavenDownloadSourceId = normalizedPreferredMavenDownloadSourceId
-            }
+            },
+            Projects = normalizedProjects,
+            ActiveProjectId = normalizedActiveProjectId
         };
     }
 }
