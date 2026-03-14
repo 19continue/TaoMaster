@@ -499,6 +499,9 @@ public partial class MainWindow : Window
     {
         _shellIntegrationStatus = _shellIntegrationService.GetStatus(_layout);
         var selectedProject = _projectCatalogService.FindProjectOrDefault(_state, preferredProjectId ?? _state.ActiveProjectId);
+        var jdks = _state.Jdks ?? Array.Empty<ManagedInstallation>();
+        var mavens = _state.Mavens ?? Array.Empty<ManagedInstallation>();
+        var projects = _state.Projects ?? Array.Empty<ManagedProject>();
 
         SidebarWorkspaceTextBlock.Text = _layout.RootDirectory;
         SidebarScopeTextBlock.Text = selectedProject is null ? _localizer["scopeGlobal"] : _localizer["scopeProject"];
@@ -527,22 +530,22 @@ public partial class MainWindow : Window
             : FormatLocalized("Active project: {0}", "当前项目：{0}", selectedProject.DisplayName);
         HeaderScopeBadgeTextBlock.Text = selectedProject is null ? _localizer["scopeGlobal"] : _localizer["scopeProject"];
 
-        JdkListBox.ItemsSource = _state.Jdks.ToList();
-        MavenListBox.ItemsSource = _state.Mavens.ToList();
-        DashboardJdkComboBox.ItemsSource = _state.Jdks.ToList();
-        DashboardMavenComboBox.ItemsSource = _state.Mavens.ToList();
-        ToolchainsJdkComboBox.ItemsSource = _state.Jdks.ToList();
-        ProjectJdkComboBox.ItemsSource = _state.Jdks.ToList();
-        ProjectMavenComboBox.ItemsSource = _state.Mavens.ToList();
-        ProjectsListBox.ItemsSource = _state.Projects.ToList();
+        JdkListBox.ItemsSource = jdks.ToList();
+        MavenListBox.ItemsSource = mavens.ToList();
+        DashboardJdkComboBox.ItemsSource = jdks.ToList();
+        DashboardMavenComboBox.ItemsSource = mavens.ToList();
+        ToolchainsJdkComboBox.ItemsSource = jdks.ToList();
+        ProjectJdkComboBox.ItemsSource = jdks.ToList();
+        ProjectMavenComboBox.ItemsSource = mavens.ToList();
+        ProjectsListBox.ItemsSource = projects.ToList();
 
-        SelectInstallation(JdkListBox, _state.Jdks, preferredJdkId ?? _state.ActiveSelection.JdkId);
-        SelectInstallation(MavenListBox, _state.Mavens, preferredMavenId ?? _state.ActiveSelection.MavenId);
-        SelectInstallationInComboBox(DashboardJdkComboBox, _state.Jdks, preferredJdkId ?? _state.ActiveSelection.JdkId);
-        SelectInstallationInComboBox(DashboardMavenComboBox, _state.Mavens, preferredMavenId ?? _state.ActiveSelection.MavenId);
-        SelectInstallationInComboBox(ToolchainsJdkComboBox, _state.Jdks, preferredJdkId ?? _state.ActiveSelection.JdkId);
+        SelectInstallation(JdkListBox, jdks, preferredJdkId ?? _state.ActiveSelection.JdkId);
+        SelectInstallation(MavenListBox, mavens, preferredMavenId ?? _state.ActiveSelection.MavenId);
+        SelectInstallationInComboBox(DashboardJdkComboBox, jdks, preferredJdkId ?? _state.ActiveSelection.JdkId);
+        SelectInstallationInComboBox(DashboardMavenComboBox, mavens, preferredMavenId ?? _state.ActiveSelection.MavenId);
+        SelectInstallationInComboBox(ToolchainsJdkComboBox, jdks, preferredJdkId ?? _state.ActiveSelection.JdkId);
         _suppressProjectSelectionChanged = true;
-        SelectProject(ProjectsListBox, _state.Projects, preferredProjectId ?? _state.ActiveProjectId);
+        SelectProject(ProjectsListBox, projects, preferredProjectId ?? _state.ActiveProjectId);
         _suppressProjectSelectionChanged = false;
         RefreshConfiguredJdkToolchains(GetSelectedToolchainJdkHome());
         RefreshSelectedProjectDetails();

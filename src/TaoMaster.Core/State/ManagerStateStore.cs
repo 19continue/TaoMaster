@@ -72,6 +72,9 @@ public sealed class ManagerStateStore
     private static ManagerState NormalizeState(ManagerState state, WorkspaceLayout layout)
     {
         var settings = state.Settings;
+        var normalizedSelection = state.ActiveSelection ?? SelectionState.Empty;
+        var normalizedJdks = state.Jdks ?? Array.Empty<ManagedInstallation>();
+        var normalizedMavens = state.Mavens ?? Array.Empty<ManagedInstallation>();
         var normalizedPathMode = string.IsNullOrWhiteSpace(settings.PathMode)
                                  || settings.PathMode.Equals("managed-segments", StringComparison.OrdinalIgnoreCase)
             ? "managed-shell-sync"
@@ -143,6 +146,9 @@ public sealed class ManagerStateStore
             && normalizedPreferredJdkDownloadSourceId == settings.PreferredJdkDownloadSourceId
             && normalizedCustomDownloadSources.SequenceEqual(settings.CustomMavenDownloadSources ?? Array.Empty<MavenDownloadSourceConfiguration>())
             && normalizedPreferredMavenDownloadSourceId == settings.PreferredMavenDownloadSourceId
+            && normalizedSelection == state.ActiveSelection
+            && normalizedJdks.SequenceEqual(state.Jdks ?? Array.Empty<ManagedInstallation>())
+            && normalizedMavens.SequenceEqual(state.Mavens ?? Array.Empty<ManagedInstallation>())
             && normalizedProjects.SequenceEqual(state.Projects ?? Array.Empty<ManagedProject>())
             && normalizedActiveProjectId == state.ActiveProjectId)
         {
@@ -151,6 +157,9 @@ public sealed class ManagerStateStore
 
         return state with
         {
+            ActiveSelection = normalizedSelection,
+            Jdks = normalizedJdks,
+            Mavens = normalizedMavens,
             Settings = settings with
             {
                 PathMode = normalizedPathMode,
