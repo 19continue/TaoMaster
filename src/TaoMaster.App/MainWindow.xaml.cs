@@ -34,7 +34,8 @@ internal enum AppSection
     Versions,
     Projects,
     Diagnostics,
-    Settings
+    Settings,
+    MavenConfig
 }
 
 internal sealed record ConfigurationScopeOption(MavenConfigurationScope Scope, string DisplayName);
@@ -74,6 +75,8 @@ public partial class MainWindow : Window
     private bool _suppressLanguageSelectionChanged;
     private bool _suppressConfigurationScopeSelectionChanged;
     private bool _suppressDownloadSourceSelectionChanged;
+    private bool _suppressMirrorEditorTextChanged;
+    private bool _mavenMirrorsEditorDirty;
     private AppSection _currentSection = AppSection.Dashboard;
 
     public MainWindow()
@@ -288,6 +291,49 @@ public partial class MainWindow : Window
         SettingsToolchainsFilePathLabelTextBlock.Text = Localize(
             "toolchains.xml Path",
             "toolchains.xml 路径");
+        ManagedJdkInstallRootLabelTextBlock.Text = Localize("Managed JDK Install Directory", "受管 JDK 安装目录");
+        ManagedMavenInstallRootLabelTextBlock.Text = Localize("Managed Maven Install Directory", "受管 Maven 安装目录");
+        SaveManagedRootsButton.Content = Localize("Save and Migrate Install Directories", "保存并迁移安装目录");
+        MavenConfigNavButton.Content = Localize("Maven Config", "Maven 配置");
+        LoadMavenSettingsButton.Content = Localize("Read Mirrors From Config File", "读取配置文件镜像");
+        ImportMirrorXmlButton.Content = Localize("Import Mirror XML", "导入镜像 XML");
+        MavenRepositoryMigrationCheckBox.Content = Localize(
+            "Move existing local repository contents when the repository directory changes.",
+            "当本地仓库目录变化时，一并迁移已有仓库内容。");
+        SaveMavenSettingsButton.Content = Localize("Save Maven Configuration", "保存 Maven 配置");
+        AddBuiltInMirrorButton.Content = Localize("Insert Built-in Mirror", "插入内置镜像");
+        OpenMavenSettingsFileButton.Content = Localize("Open", "打开");
+        OpenMavenToolchainsFileButton.Content = Localize("Open", "打开");
+        SettingsConfigurationScopeLabelTextBlock.Text = Localize("Configuration Scope", "配置作用域");
+        SettingsToolchainsFilePathLabelTextBlock.Text = Localize("toolchains.xml Path", "toolchains.xml 路径");
+        MavenConfigurationScopeHintTextBlock.Text = Localize(
+            "User scope writes to ~/.m2. Global scope writes to the selected Maven installation under conf.",
+            "用户级配置写入当前用户的 .m2 目录；全局配置写入当前选定 Maven 安装目录下的 conf。");
+        MirrorXmlEditorLabelTextBlock.Text = Localize("Mirror XML", "镜像 XML");
+        MavenMirrorsXmlEditorHintTextBlock.Text = Localize(
+            "Edit the <mirrors> XML directly. TaoMaster only updates the mirrors node and localRepository value in settings.xml.",
+            "直接编辑 <mirrors> XML。TaoMaster 只会更新 settings.xml 中的 mirrors 节点和 localRepository 值。");
+        MavenConfigTargetTitleTextBlock.Text = Localize("Current Target", "当前目标");
+        MavenConfigTargetDescriptionTextBlock.Text = Localize(
+            "Global scope writes to the selected Maven installation. User scope writes to the current user's .m2 directory.",
+            "全局配置会写入当前选定的 Maven 安装；用户级配置会写入当前用户的 .m2 目录。");
+        MavenConfigCurrentScopeLabelTextBlock.Text = Localize("Scope", "作用域");
+        MavenConfigCurrentMavenLabelTextBlock.Text = Localize("Target Maven", "目标 Maven");
+        MavenConfigEffectiveSettingsLabelTextBlock.Text = Localize("Effective settings.xml", "生效中的 settings.xml");
+        MavenConfigEffectiveToolchainsLabelTextBlock.Text = Localize("Effective toolchains.xml", "生效中的 toolchains.xml");
+        MavenConfigEditorGuideTitleTextBlock.Text = Localize("Editing Guide", "编辑说明");
+        MavenConfigIntroTextBlock.Text = Localize(
+            "Configure settings.xml, toolchains.xml, the local repository path, and mirror XML for your Maven and IDE environment.",
+            "为 Maven 与 IDE 开发环境配置 settings.xml、toolchains.xml、本地仓库目录和镜像 XML。");
+        MavenConfigEditorGuideTextBlock.Text = Localize(
+            "Use 'Read Mirrors From Config File' to load the current mirrors, edit the XML directly, then save. Opening settings.xml or toolchains.xml will normalize the file format before launching Notepad.",
+            "先用“读取配置文件镜像”载入当前镜像，再直接编辑 XML 并保存。打开 settings.xml 或 toolchains.xml 前，程序会先整理文件格式。");
+        RemoteJdkAvailabilityHintTextBlock.Text = Localize(
+            "Only versions confirmed against the official download links are shown as ready.",
+            "仅将已确认可从官方链接下载的版本标记为可用。");
+        RemoteMavenAvailabilityHintTextBlock.Text = Localize(
+            "Versions are checked against Apache's official download site in real time.",
+            "版本会实时对照 Apache 官网下载地址进行校验。");
     }
 
     private string Localize(string english, string chinese) =>
@@ -410,10 +456,8 @@ public partial class MainWindow : Window
         ShellSyncStatusTextBlock.Text = BuildShellSyncStatusText();
         ShellSyncDetailTextBlock.Text = BuildShellSyncDetailText();
         RefreshConfigurationScopeSelector();
-        MavenSettingsFilePathTextBox.Text = _state.Settings.MavenSettingsFilePath;
-        MavenToolchainsFilePathTextBox.Text = _state.Settings.MavenToolchainsFilePath;
-        MavenLocalRepositoryPathTextBox.Text = _state.Settings.MavenLocalRepositoryPath;
         RefreshConfiguredMavenMirrors();
+        RefreshMavenConfigurationBindings();
         RefreshJdkDownloadSources();
         RefreshMavenDownloadSources();
 
@@ -485,15 +529,13 @@ public partial class MainWindow : Window
     {
         _suppressDownloadSourceSelectionChanged = true;
         _availableMavenDownloadSources.Clear();
-
-        foreach (var source in _mavenSource.BuildAvailableDownloadSources(_state.Settings.CustomMavenDownloadSources))
+        foreach (var source in _mavenSource.GetBuiltInDownloadSources()
+                     .Where(source => source.Id.Equals("apache-official", StringComparison.OrdinalIgnoreCase)))
         {
             _availableMavenDownloadSources.Add(source);
         }
 
-        var selected = _availableMavenDownloadSources.FirstOrDefault(source =>
-                           source.Id.Equals(_state.Settings.PreferredMavenDownloadSourceId, StringComparison.OrdinalIgnoreCase))
-                       ?? _availableMavenDownloadSources.FirstOrDefault();
+        var selected = _availableMavenDownloadSources.FirstOrDefault();
         RemoteMavenDownloadSourceComboBox.SelectedItem = selected;
         SettingsMavenDownloadSourceComboBox.SelectedItem = selected;
         MavenDownloadSourceNameTextBox.Text = selected?.Name ?? string.Empty;
@@ -505,15 +547,13 @@ public partial class MainWindow : Window
     {
         _suppressDownloadSourceSelectionChanged = true;
         _availableJdkDownloadSources.Clear();
-
-        foreach (var source in _jdkDownloadSourceService.BuildAvailableSources(_state.Settings.CustomJdkDownloadSources))
+        foreach (var source in _jdkDownloadSourceService.GetBuiltInSources()
+                     .Where(source => source.Id.Equals("jdk-official", StringComparison.OrdinalIgnoreCase)))
         {
             _availableJdkDownloadSources.Add(source);
         }
 
-        var selected = _availableJdkDownloadSources.FirstOrDefault(source =>
-                           source.Id.Equals(_state.Settings.PreferredJdkDownloadSourceId, StringComparison.OrdinalIgnoreCase))
-                       ?? _availableJdkDownloadSources.FirstOrDefault();
+        var selected = _availableJdkDownloadSources.FirstOrDefault();
         RemoteJdkDownloadSourceComboBox.SelectedItem = selected;
         SettingsJdkDownloadSourceComboBox.SelectedItem = selected;
         JdkDownloadSourceNameTextBox.Text = selected?.Name ?? string.Empty;
@@ -525,9 +565,9 @@ public partial class MainWindow : Window
     private ManagedInstallation? ResolveMavenInstallationForConfiguration()
     {
         var selection = _selectionResolver.Resolve(_state);
-        return selection.Maven
-               ?? MavenListBox.SelectedItem as ManagedInstallation
+        return MavenListBox.SelectedItem as ManagedInstallation
                ?? DashboardMavenComboBox.SelectedItem as ManagedInstallation
+               ?? selection.Maven
                ?? _state.Mavens.FirstOrDefault();
     }
 
@@ -554,6 +594,79 @@ public partial class MainWindow : Window
         }
     }
 
+    private void RefreshMavenConfigurationBindings(bool forceEditorRefresh = false)
+    {
+        var scope = _state.Settings.MavenConfigurationScope;
+        var isUserScope = scope == MavenConfigurationScope.User;
+        var hasEffectivePaths = TryResolveMavenConfigurationPaths(scope, out var effectiveSettingsPath, out var effectiveToolchainsPath);
+        var effectiveMaven = ResolveMavenInstallationForConfiguration();
+
+        MavenSettingsFilePathTextBox.Text = isUserScope ? _state.Settings.MavenSettingsFilePath : effectiveSettingsPath;
+        MavenToolchainsFilePathTextBox.Text = isUserScope ? _state.Settings.MavenToolchainsFilePath : effectiveToolchainsPath;
+        MavenLocalRepositoryPathTextBox.Text = _state.Settings.MavenLocalRepositoryPath;
+        MavenSettingsFilePathTextBox.IsReadOnly = !isUserScope;
+        MavenToolchainsFilePathTextBox.IsReadOnly = !isUserScope;
+        BrowseMavenSettingsFileButton.IsEnabled = isUserScope;
+        BrowseMavenToolchainsFileButton.IsEnabled = isUserScope;
+        OpenMavenSettingsFileButton.IsEnabled = hasEffectivePaths;
+        OpenMavenToolchainsFileButton.IsEnabled = hasEffectivePaths;
+
+        MavenConfigCurrentScopeTextBlock.Text = isUserScope
+            ? Localize("User Configuration", "用户级配置")
+            : Localize("Global Configuration", "全局配置");
+        MavenConfigCurrentMavenTextBlock.Text = effectiveMaven?.DisplayName ?? _localizer["nonePlaceholder"];
+        MavenConfigCurrentMavenPathTextBlock.Text = effectiveMaven?.HomeDirectory
+                                                    ?? Localize(
+                                                        "Select or activate a Maven installation to target global configuration.",
+                                                        "请选择或激活一个 Maven 安装，以便定位全局配置。");
+        MavenConfigEffectiveSettingsPathTextBlock.Text = hasEffectivePaths
+            ? effectiveSettingsPath
+            : Localize("Unavailable until a Maven installation is selected.", "在选择 Maven 安装前不可用。");
+        MavenConfigEffectiveToolchainsPathTextBlock.Text = hasEffectivePaths
+            ? effectiveToolchainsPath
+            : Localize("Unavailable until a Maven installation is selected.", "在选择 Maven 安装前不可用。");
+        MavenConfigurationScopeHintTextBlock.Text = isUserScope
+            ? Localize(
+                "User scope writes to the current user's .m2 directory.",
+                "用户级配置写入当前用户的 .m2 目录。")
+            : effectiveMaven is null
+                ? Localize(
+                    "Select or activate a Maven installation before using global configuration files.",
+                    "使用全局配置文件前，请先选择或激活一个 Maven 安装。")
+                : FormatLocalized(
+                    "Global scope writes to {0}\\conf.",
+                    "全局配置将写入 {0}\\conf。",
+                    effectiveMaven.HomeDirectory);
+
+        RefreshMavenMirrorsXmlEditor(forceEditorRefresh);
+    }
+
+    private void RefreshMavenMirrorsXmlEditor(bool force = false)
+    {
+        if (!force && _mavenMirrorsEditorDirty)
+        {
+            return;
+        }
+
+        SetMavenMirrorsEditorText(_mavenConfigurationService.BuildMirrorsXml(_state.Settings.MavenMirrors));
+    }
+
+    private void SetMavenMirrorsEditorText(string xmlContent)
+    {
+        _suppressMirrorEditorTextChanged = true;
+        MavenMirrorsXmlEditorTextBox.Text = xmlContent;
+        _suppressMirrorEditorTextChanged = false;
+        _mavenMirrorsEditorDirty = false;
+    }
+
+    private IReadOnlyList<MavenMirrorConfiguration> ReadMirrorsFromEditor()
+    {
+        var xmlContent = MavenMirrorsXmlEditorTextBox.Text.Trim();
+        return string.IsNullOrWhiteSpace(xmlContent)
+            ? Array.Empty<MavenMirrorConfiguration>()
+            : _mavenConfigurationService.ImportMirrorsFromXmlContent(xmlContent);
+    }
+
     private void PopulateMavenMirrorEditor(MavenMirrorConfiguration? mirror)
     {
         if (mirror is null)
@@ -574,15 +687,23 @@ public partial class MainWindow : Window
 
     private void SyncMavenSettingsFromFile(bool persistState, string? settingsFilePathOverride = null)
     {
-        var snapshot = _mavenConfigurationService.ReadSettingsSnapshot(
-            string.IsNullOrWhiteSpace(settingsFilePathOverride)
-                ? _state.Settings.MavenSettingsFilePath
-                : settingsFilePathOverride);
+        var selectedPath = string.IsNullOrWhiteSpace(settingsFilePathOverride)
+            ? ResolveConfiguredMavenSettingsFilePath()
+            : settingsFilePathOverride.Trim();
+
+        if (string.IsNullOrWhiteSpace(selectedPath))
+        {
+            return;
+        }
+
+        var snapshot = _mavenConfigurationService.ReadSettingsSnapshot(selectedPath);
         _state = _state with
         {
             Settings = _state.Settings with
             {
-                MavenSettingsFilePath = snapshot.SettingsFilePath,
+                MavenSettingsFilePath = _state.Settings.MavenConfigurationScope == MavenConfigurationScope.User
+                    ? snapshot.SettingsFilePath
+                    : _state.Settings.MavenSettingsFilePath,
                 MavenLocalRepositoryPath = snapshot.LocalRepositoryPath,
                 MavenMirrors = snapshot.Mirrors
             }
@@ -592,6 +713,19 @@ public partial class MainWindow : Window
         {
             _stateStore.Save(_layout, _state);
         }
+    }
+
+    private string ResolveConfiguredMavenSettingsFilePath()
+    {
+        var scope = _state.Settings.MavenConfigurationScope;
+        if (scope == MavenConfigurationScope.User)
+        {
+            return _state.Settings.MavenSettingsFilePath;
+        }
+
+        return TryResolveMavenConfigurationPaths(scope, out var settingsFilePath, out _)
+            ? settingsFilePath
+            : string.Empty;
     }
 
     private static void SelectInstallation(
@@ -628,15 +762,34 @@ public partial class MainWindow : Window
         ProjectsPage.Visibility = _currentSection == AppSection.Projects ? Visibility.Visible : Visibility.Collapsed;
         DiagnosticsPage.Visibility = _currentSection == AppSection.Diagnostics ? Visibility.Visible : Visibility.Collapsed;
         SettingsPage.Visibility = _currentSection == AppSection.Settings ? Visibility.Visible : Visibility.Collapsed;
+        MavenConfigPage.Visibility = _currentSection == AppSection.MavenConfig ? Visibility.Visible : Visibility.Collapsed;
 
-        PageTitleTextBlock.Text = _localizer[GetSectionTitleKey(_currentSection)];
-        PageDescriptionTextBlock.Text = _localizer[GetSectionDescriptionKey(_currentSection)];
+        if (_currentSection == AppSection.MavenConfig)
+        {
+            PageTitleTextBlock.Text = Localize("Maven Config", "Maven 配置");
+            PageDescriptionTextBlock.Text = Localize(
+                "Manage settings.xml, toolchains.xml, the local repository, and mirror XML for Maven and IDE builds.",
+                "集中管理 Maven 与 IDE 构建所使用的 settings.xml、toolchains.xml、本地仓库和镜像 XML。");
+        }
+        else if (_currentSection == AppSection.Settings)
+        {
+            PageTitleTextBlock.Text = _localizer["pageSettingsTitle"];
+            PageDescriptionTextBlock.Text = Localize(
+                "Workspace paths, managed install roots, language, and environment behavior are grouped here.",
+                "这里集中管理工作区路径、受管安装目录、界面语言和环境行为。");
+        }
+        else
+        {
+            PageTitleTextBlock.Text = _localizer[GetSectionTitleKey(_currentSection)];
+            PageDescriptionTextBlock.Text = _localizer[GetSectionDescriptionKey(_currentSection)];
+        }
 
         ApplyNavigationButtonState(DashboardNavButton, _currentSection == AppSection.Dashboard);
         ApplyNavigationButtonState(VersionsNavButton, _currentSection == AppSection.Versions);
         ApplyNavigationButtonState(ProjectsNavButton, _currentSection == AppSection.Projects);
         ApplyNavigationButtonState(DiagnosticsNavButton, _currentSection == AppSection.Diagnostics);
         ApplyNavigationButtonState(SettingsNavButton, _currentSection == AppSection.Settings);
+        ApplyNavigationButtonState(MavenConfigNavButton, _currentSection == AppSection.MavenConfig);
     }
 
     private static string GetSectionTitleKey(AppSection section) =>
@@ -647,6 +800,7 @@ public partial class MainWindow : Window
             AppSection.Projects => "pageProjectsTitle",
             AppSection.Diagnostics => "pageDiagnosticsTitle",
             AppSection.Settings => "pageSettingsTitle",
+            AppSection.MavenConfig => "pageSettingsTitle",
             _ => "pageDashboardTitle"
         };
 
@@ -658,6 +812,7 @@ public partial class MainWindow : Window
             AppSection.Projects => "pageProjectsDescription",
             AppSection.Diagnostics => "pageDiagnosticsDescription",
             AppSection.Settings => "pageSettingsDescription",
+            AppSection.MavenConfig => "pageSettingsDescription",
             _ => "pageDashboardDescription"
         };
 
@@ -943,16 +1098,12 @@ public partial class MainWindow : Window
     {
         var currentJdkPackage = RemoteJdkVersionComboBox.SelectedItem as RemotePackageDescriptor;
         var currentMavenPackage = RemoteMavenVersionComboBox.SelectedItem as RemotePackageDescriptor;
-        var selectedJdkSource = (RemoteJdkDownloadSourceComboBox.SelectedItem as JdkDownloadSourceConfiguration)
-                                ?? _availableJdkDownloadSources.FirstOrDefault()
-                                ?? _jdkDownloadSourceService.GetBuiltInSources().First();
+        var selectedJdkSource = _jdkDownloadSourceService.GetBuiltInSources()
+            .First(source => source.Id.Equals("jdk-official", StringComparison.OrdinalIgnoreCase));
 
         var temurinTask = _temurinSource.GetLatestPackagesByFeatureAsync("x64", CancellationToken.None);
         var oracleTask = _oracleSource.GetAvailablePackagesAsync(CancellationToken.None);
-        var mavenTask = _mavenSource.GetAvailablePackagesAsync(
-            _state.Settings.PreferredMavenDownloadSourceId,
-            _state.Settings.CustomMavenDownloadSources,
-            CancellationToken.None);
+        var mavenTask = _mavenSource.GetAvailablePackagesAsync("apache-official", null, CancellationToken.None);
 
         await Task.WhenAll(temurinTask, oracleTask, mavenTask);
 
@@ -1098,13 +1249,11 @@ public partial class MainWindow : Window
     {
         RemoteJdkAvailabilityHintTextBlock.Text = BuildAvailabilitySummary(
             jdkVersions,
-            (RemoteJdkDownloadSourceComboBox.SelectedItem as JdkDownloadSourceConfiguration)?.Name
-            ?? _state.Settings.PreferredJdkDownloadSourceId,
+            Localize("official source", "官方源"),
             "JDK");
         RemoteMavenAvailabilityHintTextBlock.Text = BuildAvailabilitySummary(
             mavenVersions,
-            (RemoteMavenDownloadSourceComboBox.SelectedItem as MavenDownloadSourceConfiguration)?.Name
-            ?? _state.Settings.PreferredMavenDownloadSourceId,
+            Localize("official source", "官方源"),
             "Maven");
     }
 
@@ -1392,6 +1541,12 @@ public partial class MainWindow : Window
         ApplyCurrentSection();
     }
 
+    private void OnMavenConfigNavClicked(object sender, RoutedEventArgs e)
+    {
+        _currentSection = AppSection.MavenConfig;
+        ApplyCurrentSection();
+    }
+
     private void OnBrowseJdkImportClicked(object sender, RoutedEventArgs e)
     {
         BrowseForFolderByKey(JdkImportPathTextBox, "browseJdkDescription");
@@ -1469,6 +1624,18 @@ public partial class MainWindow : Window
     private async void OnLoadMavenSettingsClicked(object sender, RoutedEventArgs e)
     {
         await ExecuteBusyWithMessageAsync(
+            Localize("Loading Maven configuration...", "正在读取 Maven 配置..."),
+            async () =>
+            {
+                var settingsFilePath = MavenSettingsFilePathTextBox.Text.Trim();
+                await Task.Run(() => SyncMavenSettingsFromFile(persistState: true, settingsFilePathOverride: settingsFilePath));
+                RefreshMavenMirrorsXmlEditor(force: true);
+                RefreshStateBindings(GetSelectedInstallationId(JdkListBox), GetSelectedInstallationId(MavenListBox));
+                return Localize("Loaded mirrors from the configuration file.", "已从配置文件读取镜像。");
+            });
+        return;
+
+        await ExecuteBusyWithMessageAsync(
             Localize("Loading Maven settings...", "正在读取 Maven 配置..."),
             async () =>
             {
@@ -1482,6 +1649,23 @@ public partial class MainWindow : Window
 
     private void OnAddBuiltInMirrorClicked(object sender, RoutedEventArgs e)
     {
+        if (BuiltInMavenMirrorComboBox.SelectedItem is not MavenMirrorConfiguration selectedMirror)
+        {
+            ShowValidationWarning("validationSelectBuiltInMirror");
+            return;
+        }
+
+        var mergedMirrors = ReadMirrorsFromEditor()
+            .Where(existing => !existing.Id.Equals(selectedMirror.Id, StringComparison.OrdinalIgnoreCase))
+            .Concat([selectedMirror with { IsBuiltIn = true }])
+            .OrderBy(existing => existing.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        SetMavenMirrorsEditorText(_mavenConfigurationService.BuildMirrorsXml(mergedMirrors));
+        _mavenMirrorsEditorDirty = true;
+        SetStatus(_localizer.Format("mavenMirrorAddedStatus", selectedMirror.Name));
+        return;
+
         if (BuiltInMavenMirrorComboBox.SelectedItem is not MavenMirrorConfiguration mirror)
         {
             ShowValidationWarning("validationSelectBuiltInMirror");
@@ -1931,6 +2115,37 @@ public partial class MainWindow : Window
 
     private void OnMavenConfigurationScopeSelectionChanged(object sender, WpfSelectionChangedEventArgs e)
     {
+        if (_suppressConfigurationScopeSelectionChanged || MavenConfigurationScopeComboBox.SelectedItem is not ConfigurationScopeOption selectedOption)
+        {
+            return;
+        }
+
+        if (selectedOption.Scope == MavenConfigurationScope.Global
+            && ResolveMavenInstallationForConfiguration() is null)
+        {
+            RefreshConfigurationScopeSelector();
+            ShowValidationMessage(Localize(
+                "Select or activate a Maven installation before using global configuration files.",
+                "使用全局配置文件前，请先选择或激活一个 Maven 安装。"));
+            return;
+        }
+
+        _state = _state with
+        {
+            Settings = _state.Settings with
+            {
+                MavenConfigurationScope = selectedOption.Scope
+            }
+        };
+
+        _stateStore.Save(_layout, _state);
+        RefreshMavenConfigurationBindings(forceEditorRefresh: false);
+        SetStatus(FormatLocalized(
+            "Maven configuration scope set to: {0}",
+            "Maven 配置作用域已切换为：{0}",
+            selectedOption.DisplayName));
+        return;
+
         if (_suppressConfigurationScopeSelectionChanged || MavenConfigurationScopeComboBox.SelectedItem is not ConfigurationScopeOption option)
         {
             return;
@@ -1965,6 +2180,37 @@ public partial class MainWindow : Window
 
     private async void OnImportMirrorXmlClicked(object sender, RoutedEventArgs e)
     {
+        var importDialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Filter = "XML files|*.xml|All files|*.*",
+            CheckFileExists = true
+        };
+
+        if (importDialog.ShowDialog(this) != true)
+        {
+            return;
+        }
+
+        await ExecuteBusyWithMessageAsync(
+            Localize("Importing mirror XML...", "正在导入镜像 XML..."),
+            async () =>
+            {
+                var importedMirrors = await Task.Run(() => _mavenConfigurationService.ImportMirrorsFromXmlFile(importDialog.FileName));
+                var mergedMirrors = ReadMirrorsFromEditor()
+                    .Where(existing => importedMirrors.All(imported => !imported.Id.Equals(existing.Id, StringComparison.OrdinalIgnoreCase)))
+                    .Concat(importedMirrors)
+                    .OrderBy(existing => existing.Name, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+
+                SetMavenMirrorsEditorText(_mavenConfigurationService.BuildMirrorsXml(mergedMirrors));
+                _mavenMirrorsEditorDirty = true;
+                return FormatLocalized(
+                    "Imported {0} mirror entries from XML.",
+                    "已从 XML 导入 {0} 条镜像配置。",
+                    importedMirrors.Count);
+            });
+        return;
+
         var dialog = new Microsoft.Win32.OpenFileDialog
         {
             Filter = "XML files|*.xml|All files|*.*",
@@ -2714,6 +2960,86 @@ public partial class MainWindow : Window
 
     private async Task ApplyMavenSettingsAsync(bool migrateRepository)
     {
+        IReadOnlyList<MavenMirrorConfiguration> parsedMirrors;
+
+        try
+        {
+            parsedMirrors = ReadMirrorsFromEditor();
+        }
+        catch (Exception ex)
+        {
+            ShowValidationMessage(ex.Message);
+            return;
+        }
+
+        var effectiveScope = (MavenConfigurationScopeComboBox.SelectedItem as ConfigurationScopeOption)?.Scope
+                             ?? _state.Settings.MavenConfigurationScope;
+
+        if (!TryResolveMavenConfigurationPaths(effectiveScope, out var effectiveSettingsPath, out var effectiveToolchainsPath))
+        {
+            ShowValidationMessage(Localize(
+                "Select or activate a Maven installation before using global configuration files.",
+                "使用全局配置文件前，请先选择或激活一个 Maven 安装。"));
+            return;
+        }
+
+        var resolvedSettingsFilePath = effectiveScope == MavenConfigurationScope.User
+            ? MavenSettingsFilePathTextBox.Text.Trim()
+            : effectiveSettingsPath;
+        var resolvedToolchainsFilePath = effectiveScope == MavenConfigurationScope.User
+            ? MavenToolchainsFilePathTextBox.Text.Trim()
+            : effectiveToolchainsPath;
+        var resolvedLocalRepositoryPath = MavenLocalRepositoryPathTextBox.Text.Trim();
+
+        if (string.IsNullOrWhiteSpace(resolvedSettingsFilePath)
+            || string.IsNullOrWhiteSpace(resolvedToolchainsFilePath)
+            || string.IsNullOrWhiteSpace(resolvedLocalRepositoryPath))
+        {
+            ShowValidationMessage(Localize(
+                "Provide the settings.xml path, toolchains.xml path, and the Maven local repository path.",
+                "请填写 settings.xml 路径、toolchains.xml 路径和 Maven 本地仓库目录。"));
+            return;
+        }
+
+        await ExecuteBusyAsync(
+            migrateRepository ? "busyMigratingMavenRepository" : "busyApplyingMavenSettings",
+            async () =>
+            {
+                var result = await Task.Run(() => _mavenConfigurationService.ApplySettings(
+                    resolvedSettingsFilePath,
+                    resolvedLocalRepositoryPath,
+                    parsedMirrors,
+                    _state.Settings.MavenLocalRepositoryPath,
+                    migrateRepository));
+                await Task.Run(() => _mavenConfigurationService.EnsureEditableToolchainsFile(resolvedToolchainsFilePath));
+
+                _state = _state with
+                {
+                    Settings = _state.Settings with
+                    {
+                        MavenConfigurationScope = effectiveScope,
+                        MavenSettingsFilePath = effectiveScope == MavenConfigurationScope.User
+                            ? result.SettingsFilePath
+                            : _state.Settings.MavenSettingsFilePath,
+                        MavenToolchainsFilePath = effectiveScope == MavenConfigurationScope.User
+                            ? Path.GetFullPath(resolvedToolchainsFilePath)
+                            : _state.Settings.MavenToolchainsFilePath,
+                        MavenLocalRepositoryPath = result.LocalRepositoryPath,
+                        MavenMirrors = parsedMirrors
+                    }
+                };
+
+                await Task.Run(() => _stateStore.Save(_layout, _state));
+                RefreshMavenMirrorsXmlEditor(force: true);
+                RefreshStateBindings(GetSelectedInstallationId(JdkListBox), GetSelectedInstallationId(MavenListBox));
+
+                return result.RepositoryMigrated
+                    ? _localizer.Format("mavenRepositoryMigratedStatus", result.LocalRepositoryPath)
+                    : _localizer.Format("mavenSettingsAppliedStatus", result.SettingsFilePath);
+            },
+            ShowSuccessDialog);
+        return;
+
         var settingsFilePath = MavenSettingsFilePathTextBox.Text.Trim();
         var toolchainsFilePath = MavenToolchainsFilePathTextBox.Text.Trim();
         var localRepositoryPath = MavenLocalRepositoryPathTextBox.Text.Trim();
@@ -3098,6 +3424,41 @@ public partial class MainWindow : Window
         var lines = new List<string> { $"{label}:" };
         lines.AddRange(segments.Select(segment => $"  - {segment}"));
         return lines;
+    }
+
+    private void OnMavenMirrorsXmlEditorTextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
+    {
+        if (_suppressMirrorEditorTextChanged)
+        {
+            return;
+        }
+
+        _mavenMirrorsEditorDirty = true;
+    }
+
+    private void OnComboBoxPreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        if (sender is not WpfComboBox comboBox || comboBox.IsDropDownOpen)
+        {
+            return;
+        }
+
+        var scrollViewer = FindAncestors<WpfScrollViewer>(comboBox).Skip(1).FirstOrDefault()
+                           ?? FindAncestors<WpfScrollViewer>(comboBox).FirstOrDefault();
+        if (scrollViewer is null)
+        {
+            e.Handled = true;
+            return;
+        }
+
+        var forwardedEvent = new MouseWheelEventArgs(e.MouseDevice, e.Timestamp, e.Delta)
+        {
+            RoutedEvent = UIElement.MouseWheelEvent,
+            Source = sender
+        };
+
+        e.Handled = true;
+        scrollViewer.RaiseEvent(forwardedEvent);
     }
 
     private void OnEmbeddedListPreviewMouseWheel(object sender, MouseWheelEventArgs e)

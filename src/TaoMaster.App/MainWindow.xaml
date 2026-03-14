@@ -157,6 +157,7 @@
             <Setter Property="Padding" Value="10,6" />
             <Setter Property="Foreground" Value="{StaticResource InkBrush}" />
             <Setter Property="FontSize" Value="13" />
+            <EventSetter Event="PreviewMouseWheel" Handler="OnComboBoxPreviewMouseWheel" />
         </Style>
         <Style x:Key="CleanListBoxStyle" TargetType="ListBox">
             <Setter Property="Background" Value="Transparent" />
@@ -294,6 +295,10 @@
                             Content="Settings"
                             Style="{StaticResource NavButtonStyle}"
                             Click="OnSettingsNavClicked" />
+                    <Button x:Name="MavenConfigNavButton"
+                            Content="Maven Config"
+                            Style="{StaticResource NavButtonStyle}"
+                            Click="OnMavenConfigNavClicked" />
                 </StackPanel>
                 <Border x:Name="SidebarFooterCard"
                         Grid.Row="2"
@@ -986,12 +991,14 @@
                                     <TextBlock Margin="0,0,0,14"
                                                Tag="remoteJdkProviderHint"
                                                Style="{StaticResource BodyTextStyle}"
-                                               Text="Remote JDK downloads currently use Temurin. Oracle JDK already supports local discovery and import into TaoMaster." />
+                                               Text="Remote JDK downloads use the official Temurin API and Oracle's published download links. Version availability is refreshed from the official sources." />
                                     <TextBlock x:Name="RemoteJdkDownloadSourceLabelTextBlock"
+                                               Visibility="Collapsed"
                                                FontWeight="SemiBold"
                                                Foreground="{StaticResource InkBrush}"
                                                Text="JDK Download Source" />
                                     <ComboBox x:Name="RemoteJdkDownloadSourceComboBox"
+                                              Visibility="Collapsed"
                                               Margin="0,10,0,14"
                                               Height="36"
                                               DisplayMemberPath="Name"
@@ -1044,12 +1051,14 @@
                                     <TextBlock x:Name="RemoteJdkAvailabilityHintTextBlock"
                                                Margin="0,-6,0,16"
                                                Style="{StaticResource BodyTextStyle}"
-                                               Text="Only versions that can be downloaded by the selected source should be used." />
+                                               Text="Only versions confirmed against the official download links are shown as ready." />
                                     <TextBlock x:Name="RemoteMavenDownloadSourceLabelTextBlock"
+                                               Visibility="Collapsed"
                                                FontWeight="SemiBold"
                                                Foreground="{StaticResource InkBrush}"
                                                Text="Maven Download Source" />
                                     <ComboBox x:Name="RemoteMavenDownloadSourceComboBox"
+                                              Visibility="Collapsed"
                                               Margin="0,10,0,14"
                                               Height="36"
                                               DisplayMemberPath="Name"
@@ -1102,7 +1111,7 @@
                                     <TextBlock x:Name="RemoteMavenAvailabilityHintTextBlock"
                                                Margin="0,10,0,0"
                                                Style="{StaticResource BodyTextStyle}"
-                                               Text="Unavailable versions stay visible so you can tell which mirror is missing which package." />
+                                               Text="Versions are checked against Apache's official download site in real time." />
                                 </StackPanel>
                             </Border>
 
@@ -1355,12 +1364,14 @@
                               VerticalScrollBarVisibility="Auto">
                     <Grid>
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="1.18*" />
-                            <ColumnDefinition Width="0.82*" />
+                            <ColumnDefinition Width="1*" />
+                            <ColumnDefinition Width="1*" />
                         </Grid.ColumnDefinitions>
 
-                        <StackPanel Margin="0,0,28,0">
-                            <Border Style="{StaticResource CardStyle}">
+                        <StackPanel Margin="0,0,22,0">
+                            <Border x:Name="DownloadSourcesCard"
+                                    Visibility="Collapsed"
+                                    Style="{StaticResource CardStyle}">
                                 <StackPanel>
                                     <TextBlock Tag="settingsWorkspaceTitle"
                                                Style="{StaticResource SectionTitleStyle}"
@@ -1609,7 +1620,9 @@
                                 </StackPanel>
                             </Border>
 
-                            <Border Style="{StaticResource CardStyle}">
+                            <Border x:Name="LegacyMavenConfigurationCard"
+                                    Visibility="Collapsed"
+                                    Style="{StaticResource CardStyle}">
                                 <StackPanel>
                                     <TextBlock Tag="settingsMavenConfigTitle"
                                                Style="{StaticResource SectionTitleStyle}"
@@ -1618,19 +1631,287 @@
                                                Tag="settingsMavenConfigDescription"
                                                Style="{StaticResource BodyTextStyle}"
                                                Text="Configure settings.xml, migrate the local repository path, and manage Maven download mirrors from one place." />
-                                    <TextBlock x:Name="SettingsConfigurationScopeLabelTextBlock"
+                                    <TextBlock x:Name="LegacySettingsConfigurationScopeLabelTextBlock"
                                                FontWeight="SemiBold"
                                                Foreground="{StaticResource InkBrush}"
                                                Text="Configuration Scope" />
-                                    <ComboBox x:Name="MavenConfigurationScopeComboBox"
+                                    <ComboBox x:Name="LegacyMavenConfigurationScopeComboBox"
                                               Margin="0,8,0,16"
                                               Height="36"
                                               DisplayMemberPath="DisplayName"
                                               Style="{StaticResource InputComboBoxStyle}"
                                               SelectionChanged="OnMavenConfigurationScopeSelectionChanged" />
                                     <WrapPanel Margin="0,0,0,16">
-                                        <Button x:Name="LoadMavenSettingsButton"
+                                        <Button x:Name="LegacyLoadMavenSettingsButton"
                                                 Content="Load Mirrors From Config File"
+                                                Style="{StaticResource SecondaryButtonStyle}"
+                                                Click="OnLoadMavenSettingsClicked" />
+                                        <Button x:Name="LegacyImportMirrorXmlButton"
+                                                Content="Import Mirror XML"
+                                                Style="{StaticResource SecondaryButtonStyle}"
+                                                Click="OnImportMirrorXmlClicked" />
+                                    </WrapPanel>
+
+                                    <TextBlock Tag="settingsMavenSettingsPathLabel"
+                                               FontWeight="SemiBold"
+                                               Foreground="{StaticResource InkBrush}"
+                                               Text="settings.xml Path" />
+                                    <Grid Margin="0,8,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox x:Name="LegacyMavenSettingsFilePathTextBox"
+                                                 Grid.Column="0"
+                                                 Height="36"
+                                                 Margin="0,0,10,0"
+                                                 Style="{StaticResource InputTextBoxStyle}"
+                                                 VerticalContentAlignment="Center" />
+                                        <Button Grid.Column="1"
+                                                Tag="browseButton"
+                                                Content="Browse"
+                                                Width="88"
+                                                Style="{StaticResource SecondaryButtonStyle}"
+                                                Click="OnBrowseMavenSettingsFileClicked" />
+                                        <Button Grid.Column="2"
+                                                x:Name="LegacyOpenMavenSettingsFileButton"
+                                                Content="Open"
+                                                Width="88"
+                                                Style="{StaticResource SecondaryButtonStyle}"
+                                                Click="OnOpenMavenSettingsFileClicked" />
+                                    </Grid>
+
+                                    <TextBlock x:Name="LegacySettingsToolchainsFilePathLabelTextBlock"
+                                               Margin="0,16,0,0"
+                                               FontWeight="SemiBold"
+                                               Foreground="{StaticResource InkBrush}"
+                                               Text="toolchains.xml Path" />
+                                    <Grid Margin="0,8,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox x:Name="LegacyMavenToolchainsFilePathTextBox"
+                                                 Grid.Column="0"
+                                                 Height="36"
+                                                 Margin="0,0,10,0"
+                                                 Style="{StaticResource InputTextBoxStyle}"
+                                                 VerticalContentAlignment="Center" />
+                                        <Button Grid.Column="1"
+                                                Tag="browseButton"
+                                                Content="Browse"
+                                                Width="88"
+                                                Style="{StaticResource SecondaryButtonStyle}"
+                                                Click="OnBrowseMavenToolchainsFileClicked" />
+                                        <Button Grid.Column="2"
+                                                x:Name="LegacyOpenMavenToolchainsFileButton"
+                                                Content="Open"
+                                                Width="88"
+                                                Style="{StaticResource SecondaryButtonStyle}"
+                                                Click="OnOpenMavenToolchainsFileClicked" />
+                                    </Grid>
+
+                                    <TextBlock Margin="0,16,0,0"
+                                               Tag="settingsMavenLocalRepoLabel"
+                                               FontWeight="SemiBold"
+                                               Foreground="{StaticResource InkBrush}"
+                                               Text="Local Repository" />
+                                    <Grid Margin="0,8,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox x:Name="LegacyMavenLocalRepositoryPathTextBox"
+                                                 Grid.Column="0"
+                                                 Height="36"
+                                                 Margin="0,0,10,0"
+                                                 Style="{StaticResource InputTextBoxStyle}"
+                                                 VerticalContentAlignment="Center" />
+                                        <Button Grid.Column="1"
+                                                Tag="browseButton"
+                                                Content="Browse"
+                                                Width="88"
+                                                Style="{StaticResource SecondaryButtonStyle}"
+                                                Click="OnBrowseMavenLocalRepositoryClicked" />
+                                    </Grid>
+                                    <CheckBox x:Name="LegacyMavenRepositoryMigrationCheckBox"
+                                              Margin="0,12,0,0"
+                                              Content="Move existing local repository contents when the repository directory changes." />
+
+                                    <TextBlock Margin="0,16,0,0"
+                                               Tag="settingsMavenMirrorTitle"
+                                               FontWeight="SemiBold"
+                                               Foreground="{StaticResource InkBrush}"
+                                               Text="Built-in Mirrors" />
+                                    <Grid Margin="0,8,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <ComboBox x:Name="LegacyBuiltInMavenMirrorComboBox"
+                                                  Grid.Column="0"
+                                                  Height="36"
+                                                  Margin="0,0,10,0"
+                                                  DisplayMemberPath="Name"
+                                                  Style="{StaticResource InputComboBoxStyle}" />
+                                        <Button Grid.Column="1"
+                                                Tag="addBuiltInMirrorButton"
+                                                Content="Add Mirror"
+                                                Style="{StaticResource SecondaryButtonStyle}"
+                                                Click="OnAddBuiltInMirrorClicked" />
+                                    </Grid>
+
+                                    <TextBlock Margin="0,16,0,0"
+                                               Tag="settingsCustomMirrorTitle"
+                                               FontWeight="SemiBold"
+                                               Foreground="{StaticResource InkBrush}"
+                                               Text="Custom Mirror" />
+                                    <Grid Margin="0,8,0,0">
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="1.1*" />
+                                            <ColumnDefinition Width="1.4*" />
+                                            <ColumnDefinition Width="0.9*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <TextBox x:Name="LegacyCustomMavenMirrorNameTextBox"
+                                                 Grid.Row="0"
+                                                 Grid.Column="0"
+                                                 Margin="0,0,10,10"
+                                                 Height="36"
+                                                 Style="{StaticResource InputTextBoxStyle}"
+                                                 VerticalContentAlignment="Center" />
+                                        <TextBox x:Name="LegacyCustomMavenMirrorUrlTextBox"
+                                                 Grid.Row="0"
+                                                 Grid.Column="1"
+                                                 Margin="0,0,10,10"
+                                                 Height="36"
+                                                 Style="{StaticResource InputTextBoxStyle}"
+                                                 VerticalContentAlignment="Center" />
+                                        <TextBox x:Name="LegacyCustomMavenMirrorOfTextBox"
+                                                 Grid.Row="0"
+                                                 Grid.Column="2"
+                                                 Margin="0,0,10,10"
+                                                 Height="36"
+                                                 Style="{StaticResource InputTextBoxStyle}"
+                                                 VerticalContentAlignment="Center"
+                                                 Text="*" />
+                                       <Button Grid.Row="0"
+                                                Grid.Column="3"
+                                                Tag="addCustomMirrorButton"
+                                                Content="Add Custom"
+                                                Style="{StaticResource ActionButtonStyle}"
+                                                Click="OnAddCustomMirrorClicked" />
+
+                                        <TextBlock Grid.Row="1"
+                                                   Grid.ColumnSpan="4"
+                                                   Tag="settingsCustomMirrorHint"
+                                                   Style="{StaticResource BodyTextStyle}"
+                                                   Text="Fill in mirror name, URL, and mirrorOf pattern. Use * to proxy all repositories." />
+                                    </Grid>
+
+                                    <TextBlock Margin="0,16,0,0"
+                                               Tag="settingsConfiguredMirrorsLabel"
+                                               FontWeight="SemiBold"
+                                               Foreground="{StaticResource InkBrush}"
+                                               Text="Configured Mirrors" />
+                                    <ListBox x:Name="LegacyConfiguredMavenMirrorsListBox"
+                                             Margin="0,8,0,0"
+                                             MinHeight="190"
+                                             Style="{StaticResource CleanListBoxStyle}"
+                                             PreviewMouseWheel="OnEmbeddedListPreviewMouseWheel"
+                                             ItemContainerStyle="{StaticResource SelectablePanelListItemStyle}"
+                                             SelectionChanged="OnConfiguredMavenMirrorSelectionChanged">
+                                        <ListBox.ItemTemplate>
+                                            <DataTemplate>
+                                                <StackPanel Margin="0,4,12,4">
+                                                    <TextBlock FontSize="18"
+                                                               FontWeight="SemiBold"
+                                                               Foreground="{StaticResource InkBrush}"
+                                                               Text="{Binding Name}" />
+                                                    <TextBlock Margin="0,8,0,0"
+                                                               FontFamily="Consolas"
+                                                               FontSize="12.5"
+                                                               Foreground="{StaticResource MutedBrush}"
+                                                               Text="{Binding Url}" />
+                                                    <TextBlock Margin="0,8,0,0"
+                                                               FontFamily="Consolas"
+                                                               FontSize="12.5"
+                                                               Foreground="{StaticResource MutedBrush}"
+                                                               TextWrapping="Wrap">
+                                                        <Run Tag="settingsMirrorOfLabel"
+                                                             Text="mirrorOf" />
+                                                        <Run Text=": " />
+                                                        <Run Text="{Binding MirrorOf}" />
+                                                    </TextBlock>
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ListBox.ItemTemplate>
+                                    </ListBox>
+
+                                    <WrapPanel Margin="0,16,0,0">
+                                        <Button x:Name="LegacyUpdateSelectedMirrorButton"
+                                                Content="Update Selected Mirror"
+                                                Style="{StaticResource SecondaryButtonStyle}"
+                                                Click="OnUpdateSelectedMirrorClicked" />
+                                        <Button Tag="removeSelectedMirrorButton"
+                                                Content="Remove Selected Mirror"
+                                                Style="{StaticResource SecondaryButtonStyle}"
+                                                Click="OnRemoveSelectedMirrorClicked" />
+                                        <Button x:Name="LegacySaveMavenSettingsButton"
+                                                Content="Save Maven Configuration"
+                                                Style="{StaticResource ActionButtonStyle}"
+                                                Click="OnSaveMavenSettingsClicked" />
+                                    </WrapPanel>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </Grid>
+                </ScrollViewer>
+                <ScrollViewer x:Name="MavenConfigPage"
+                              Visibility="Collapsed"
+                              VerticalScrollBarVisibility="Auto">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="1.35*" />
+                            <ColumnDefinition Width="0.65*" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Margin="0,0,24,0">
+                            <Border Style="{StaticResource CardStyle}">
+                                <StackPanel>
+                                    <TextBlock Tag="settingsMavenConfigTitle"
+                                               Style="{StaticResource SectionTitleStyle}"
+                                               Text="Maven Configuration" />
+                                    <TextBlock x:Name="MavenConfigIntroTextBlock"
+                                               Margin="0,10,0,16"
+                                               Style="{StaticResource BodyTextStyle}"
+                                               Text="Configure settings.xml, toolchains.xml, the local repository path, and mirror XML for your Maven and IDE environment." />
+
+                                    <TextBlock x:Name="SettingsConfigurationScopeLabelTextBlock"
+                                               FontWeight="SemiBold"
+                                               Foreground="{StaticResource InkBrush}"
+                                               Text="Configuration Scope" />
+                                    <ComboBox x:Name="MavenConfigurationScopeComboBox"
+                                              Margin="0,8,0,0"
+                                              Height="36"
+                                              DisplayMemberPath="DisplayName"
+                                              Style="{StaticResource InputComboBoxStyle}"
+                                              SelectionChanged="OnMavenConfigurationScopeSelectionChanged" />
+                                    <TextBlock x:Name="MavenConfigurationScopeHintTextBlock"
+                                               Margin="0,10,0,16"
+                                               Style="{StaticResource BodyTextStyle}"
+                                               Text="User scope writes to ~/.m2. Global scope writes to the selected Maven installation under conf." />
+
+                                    <WrapPanel Margin="0,0,0,16">
+                                        <Button x:Name="LoadMavenSettingsButton"
+                                                Content="Read Mirrors From Config File"
                                                 Style="{StaticResource SecondaryButtonStyle}"
                                                 Click="OnLoadMavenSettingsClicked" />
                                         <Button x:Name="ImportMirrorXmlButton"
@@ -1655,7 +1936,8 @@
                                                  Margin="0,0,10,0"
                                                  Style="{StaticResource InputTextBoxStyle}"
                                                  VerticalContentAlignment="Center" />
-                                        <Button Grid.Column="1"
+                                        <Button x:Name="BrowseMavenSettingsFileButton"
+                                                Grid.Column="1"
                                                 Tag="browseButton"
                                                 Content="Browse"
                                                 Width="88"
@@ -1686,7 +1968,8 @@
                                                  Margin="0,0,10,0"
                                                  Style="{StaticResource InputTextBoxStyle}"
                                                  VerticalContentAlignment="Center" />
-                                        <Button Grid.Column="1"
+                                        <Button x:Name="BrowseMavenToolchainsFileButton"
+                                                Grid.Column="1"
                                                 Tag="browseButton"
                                                 Content="Browse"
                                                 Width="88"
@@ -1727,7 +2010,7 @@
                                               Margin="0,12,0,0"
                                               Content="Move existing local repository contents when the repository directory changes." />
 
-                                    <TextBlock Margin="0,16,0,0"
+                                    <TextBlock Margin="0,18,0,0"
                                                Tag="settingsMavenMirrorTitle"
                                                FontWeight="SemiBold"
                                                Foreground="{StaticResource InkBrush}"
@@ -1743,114 +2026,36 @@
                                                   Margin="0,0,10,0"
                                                   DisplayMemberPath="Name"
                                                   Style="{StaticResource InputComboBoxStyle}" />
-                                        <Button Grid.Column="1"
-                                                Tag="addBuiltInMirrorButton"
-                                                Content="Add Mirror"
+                                        <Button x:Name="AddBuiltInMirrorButton"
+                                                Grid.Column="1"
+                                                Content="Insert Built-in Mirror"
                                                 Style="{StaticResource SecondaryButtonStyle}"
                                                 Click="OnAddBuiltInMirrorClicked" />
                                     </Grid>
 
-                                    <TextBlock Margin="0,16,0,0"
-                                               Tag="settingsCustomMirrorTitle"
+                                    <TextBlock x:Name="MirrorXmlEditorLabelTextBlock"
+                                               Margin="0,18,0,0"
                                                FontWeight="SemiBold"
                                                Foreground="{StaticResource InkBrush}"
-                                               Text="Custom Mirror" />
-                                    <Grid Margin="0,8,0,0">
-                                        <Grid.RowDefinitions>
-                                            <RowDefinition Height="Auto" />
-                                            <RowDefinition Height="Auto" />
-                                        </Grid.RowDefinitions>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="1.1*" />
-                                            <ColumnDefinition Width="1.4*" />
-                                            <ColumnDefinition Width="0.9*" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-
-                                        <TextBox x:Name="CustomMavenMirrorNameTextBox"
-                                                 Grid.Row="0"
-                                                 Grid.Column="0"
-                                                 Margin="0,0,10,10"
-                                                 Height="36"
-                                                 Style="{StaticResource InputTextBoxStyle}"
-                                                 VerticalContentAlignment="Center" />
-                                        <TextBox x:Name="CustomMavenMirrorUrlTextBox"
-                                                 Grid.Row="0"
-                                                 Grid.Column="1"
-                                                 Margin="0,0,10,10"
-                                                 Height="36"
-                                                 Style="{StaticResource InputTextBoxStyle}"
-                                                 VerticalContentAlignment="Center" />
-                                        <TextBox x:Name="CustomMavenMirrorOfTextBox"
-                                                 Grid.Row="0"
-                                                 Grid.Column="2"
-                                                 Margin="0,0,10,10"
-                                                 Height="36"
-                                                 Style="{StaticResource InputTextBoxStyle}"
-                                                 VerticalContentAlignment="Center"
-                                                 Text="*" />
-                                       <Button Grid.Row="0"
-                                                Grid.Column="3"
-                                                Tag="addCustomMirrorButton"
-                                                Content="Add Custom"
-                                                Style="{StaticResource ActionButtonStyle}"
-                                                Click="OnAddCustomMirrorClicked" />
-
-                                        <TextBlock Grid.Row="1"
-                                                   Grid.ColumnSpan="4"
-                                                   Tag="settingsCustomMirrorHint"
-                                                   Style="{StaticResource BodyTextStyle}"
-                                                   Text="Fill in mirror name, URL, and mirrorOf pattern. Use * to proxy all repositories." />
-                                    </Grid>
-
-                                    <TextBlock Margin="0,16,0,0"
-                                               Tag="settingsConfiguredMirrorsLabel"
-                                               FontWeight="SemiBold"
-                                               Foreground="{StaticResource InkBrush}"
-                                               Text="Configured Mirrors" />
-                                    <ListBox x:Name="ConfiguredMavenMirrorsListBox"
+                                               Text="Mirror XML" />
+                                    <TextBox x:Name="MavenMirrorsXmlEditorTextBox"
                                              Margin="0,8,0,0"
-                                             MinHeight="190"
-                                             Style="{StaticResource CleanListBoxStyle}"
-                                             PreviewMouseWheel="OnEmbeddedListPreviewMouseWheel"
-                                             ItemContainerStyle="{StaticResource SelectablePanelListItemStyle}"
-                                             SelectionChanged="OnConfiguredMavenMirrorSelectionChanged">
-                                        <ListBox.ItemTemplate>
-                                            <DataTemplate>
-                                                <StackPanel Margin="0,4,12,4">
-                                                    <TextBlock FontSize="18"
-                                                               FontWeight="SemiBold"
-                                                               Foreground="{StaticResource InkBrush}"
-                                                               Text="{Binding Name}" />
-                                                    <TextBlock Margin="0,8,0,0"
-                                                               FontFamily="Consolas"
-                                                               FontSize="12.5"
-                                                               Foreground="{StaticResource MutedBrush}"
-                                                               Text="{Binding Url}" />
-                                                    <TextBlock Margin="0,8,0,0"
-                                                               FontFamily="Consolas"
-                                                               FontSize="12.5"
-                                                               Foreground="{StaticResource MutedBrush}"
-                                                               TextWrapping="Wrap">
-                                                        <Run Tag="settingsMirrorOfLabel"
-                                                             Text="mirrorOf" />
-                                                        <Run Text=": " />
-                                                        <Run Text="{Binding MirrorOf}" />
-                                                    </TextBlock>
-                                                </StackPanel>
-                                            </DataTemplate>
-                                        </ListBox.ItemTemplate>
-                                    </ListBox>
+                                             MinHeight="320"
+                                             AcceptsReturn="True"
+                                             AcceptsTab="True"
+                                             HorizontalScrollBarVisibility="Auto"
+                                             VerticalScrollBarVisibility="Auto"
+                                             FontFamily="Consolas"
+                                             FontSize="12.5"
+                                             TextWrapping="NoWrap"
+                                             Style="{StaticResource InputTextBoxStyle}"
+                                             TextChanged="OnMavenMirrorsXmlEditorTextChanged" />
+                                    <TextBlock x:Name="MavenMirrorsXmlEditorHintTextBlock"
+                                               Margin="0,10,0,0"
+                                               Style="{StaticResource BodyTextStyle}"
+                                               Text="Edit the &lt;mirrors&gt; XML directly. TaoMaster only updates the mirrors node and localRepository value in settings.xml." />
 
-                                    <WrapPanel Margin="0,16,0,0">
-                                        <Button x:Name="UpdateSelectedMirrorButton"
-                                                Content="Update Selected Mirror"
-                                                Style="{StaticResource SecondaryButtonStyle}"
-                                                Click="OnUpdateSelectedMirrorClicked" />
-                                        <Button Tag="removeSelectedMirrorButton"
-                                                Content="Remove Selected Mirror"
-                                                Style="{StaticResource SecondaryButtonStyle}"
-                                                Click="OnRemoveSelectedMirrorClicked" />
+                                    <WrapPanel Margin="0,18,0,0">
                                         <Button x:Name="SaveMavenSettingsButton"
                                                 Content="Save Maven Configuration"
                                                 Style="{StaticResource ActionButtonStyle}"
@@ -1859,9 +2064,89 @@
                                 </StackPanel>
                             </Border>
                         </StackPanel>
+
+                        <StackPanel Grid.Column="1">
+                            <Border Style="{StaticResource CardStyle}">
+                                <StackPanel>
+                                    <TextBlock x:Name="MavenConfigTargetTitleTextBlock"
+                                               Style="{StaticResource SectionTitleStyle}"
+                                               Text="Current Target" />
+                                    <TextBlock x:Name="MavenConfigTargetDescriptionTextBlock"
+                                               Margin="0,10,0,16"
+                                               Style="{StaticResource BodyTextStyle}"
+                                               Text="Global scope writes to the selected Maven installation. User scope writes to the current user's .m2 directory." />
+                                    <TextBlock x:Name="MavenConfigCurrentScopeLabelTextBlock"
+                                               FontWeight="SemiBold"
+                                               Foreground="{StaticResource InkBrush}"
+                                               Text="Scope" />
+                                    <TextBlock x:Name="MavenConfigCurrentScopeTextBlock"
+                                               Margin="0,8,0,0"
+                                               FontSize="14"
+                                               FontWeight="SemiBold"
+                                               Foreground="{StaticResource AccentBrush}"
+                                               Text="User Configuration" />
+                                    <TextBlock x:Name="MavenConfigCurrentMavenLabelTextBlock"
+                                               Margin="0,16,0,0"
+                                               FontWeight="SemiBold"
+                                               Foreground="{StaticResource InkBrush}"
+                                               Text="Target Maven" />
+                                    <TextBlock x:Name="MavenConfigCurrentMavenTextBlock"
+                                               Margin="0,8,0,0"
+                                               FontSize="14"
+                                               FontWeight="SemiBold"
+                                               Foreground="{StaticResource InkBrush}"
+                                               Text="(none)" />
+                                    <TextBlock x:Name="MavenConfigCurrentMavenPathTextBlock"
+                                               Margin="0,8,0,0"
+                                               FontFamily="Consolas"
+                                               FontSize="12.5"
+                                               Foreground="{StaticResource MutedBrush}"
+                                               TextWrapping="Wrap" />
+                                    <TextBlock x:Name="MavenConfigEffectiveSettingsLabelTextBlock"
+                                               Margin="0,16,0,0"
+                                               FontWeight="SemiBold"
+                                               Foreground="{StaticResource InkBrush}"
+                                               Text="Effective settings.xml" />
+                                    <TextBlock x:Name="MavenConfigEffectiveSettingsPathTextBlock"
+                                               Margin="0,8,0,0"
+                                               FontFamily="Consolas"
+                                               FontSize="12.5"
+                                               Foreground="{StaticResource MutedBrush}"
+                                               TextWrapping="Wrap" />
+                                    <TextBlock x:Name="MavenConfigEffectiveToolchainsLabelTextBlock"
+                                               Margin="0,16,0,0"
+                                               FontWeight="SemiBold"
+                                               Foreground="{StaticResource InkBrush}"
+                                               Text="Effective toolchains.xml" />
+                                    <TextBlock x:Name="MavenConfigEffectiveToolchainsPathTextBlock"
+                                               Margin="0,8,0,0"
+                                               FontFamily="Consolas"
+                                               FontSize="12.5"
+                                               Foreground="{StaticResource MutedBrush}"
+                                               TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Border>
+
+                            <Border Style="{StaticResource CardStyle}">
+                                <StackPanel>
+                                    <TextBlock x:Name="MavenConfigEditorGuideTitleTextBlock"
+                                               Style="{StaticResource SectionTitleStyle}"
+                                               Text="Editing Guide" />
+                                    <TextBlock x:Name="MavenConfigEditorGuideTextBlock"
+                                               Margin="0,10,0,0"
+                                               Style="{StaticResource BodyTextStyle}"
+                                               Text="Use 'Read Mirrors From Config File' to load the current mirrors, edit the XML directly, then save. Opening settings.xml or toolchains.xml will normalize the file format before launching Notepad." />
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
                     </Grid>
                 </ScrollViewer>
                 <StackPanel Visibility="Collapsed">
+                    <TextBox x:Name="CustomMavenMirrorNameTextBox" />
+                    <TextBox x:Name="CustomMavenMirrorUrlTextBox" />
+                    <TextBox x:Name="CustomMavenMirrorOfTextBox" />
+                    <ListBox x:Name="ConfiguredMavenMirrorsListBox" />
+                    <Button x:Name="UpdateSelectedMirrorButton" />
                     <ComboBox x:Name="MavenDownloadSourceComboBox" />
                     <TextBlock x:Name="MavenDownloadSourceBaseUrlTextBlock" />
                     <TextBox x:Name="CustomMavenDownloadSourceNameTextBox" />

@@ -466,13 +466,8 @@ async Task<RemotePackageDescriptor> ResolveJdkPackageAsync(string[] cliArgs)
 
 async Task<RemotePackageDescriptor> ResolveMavenPackageAsync(string[] cliArgs)
 {
-    var state = stateStore.EnsureInitialized(layout);
     var version = GetOptionValue(cliArgs, "--version");
-    return await mavenSource.ResolveAsync(
-        version,
-        CancellationToken.None,
-        state.Settings.PreferredMavenDownloadSourceId,
-        state.Settings.CustomMavenDownloadSources);
+    return await mavenSource.ResolveAsync(version, CancellationToken.None);
 }
 
 WorkspaceLayout GetManagedLayout(ManagerState state) =>

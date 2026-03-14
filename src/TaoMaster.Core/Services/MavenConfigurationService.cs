@@ -1,3 +1,4 @@
+using System.Text;
 using System.Xml.Linq;
 using TaoMaster.Core.Models;
 
@@ -68,6 +69,30 @@ public sealed class MavenConfigurationService
             .ToList();
     }
 
+    public string BuildMirrorsXml(IReadOnlyList<MavenMirrorConfiguration> mirrors)
+    {
+        var document = new XDocument(
+            new XDeclaration("1.0", "utf-8", "yes"),
+            new XElement(
+                "mirrors",
+                (mirrors ?? Array.Empty<MavenMirrorConfiguration>())
+                .Where(mirror => !string.IsNullOrWhiteSpace(mirror.Id)
+                                 && !string.IsNullOrWhiteSpace(mirror.Name)
+                                 && !string.IsNullOrWhiteSpace(mirror.Url))
+                .OrderBy(mirror => mirror.Name, StringComparer.OrdinalIgnoreCase)
+                .Select(mirror =>
+                    new XElement(
+                        "mirror",
+                        new XElement("id", mirror.Id),
+                        new XElement("name", mirror.Name),
+                        new XElement("url", NormalizeUrl(mirror.Url)),
+                        new XElement("mirrorOf", string.IsNullOrWhiteSpace(mirror.MirrorOf) ? "*" : mirror.MirrorOf)))));
+
+        using var writer = new Utf8StringWriter();
+        document.Save(writer);
+        return writer.ToString();
+    }
+
     public MavenSettingsSnapshot ReadSettingsSnapshot(string settingsFilePath)
     {
         if (string.IsNullOrWhiteSpace(settingsFilePath))
@@ -117,7 +142,17 @@ public sealed class MavenConfigurationService
             throw new FileNotFoundException("Mirror XML file was not found.", normalizedPath);
         }
 
-        var document = XDocument.Load(normalizedPath, LoadOptions.PreserveWhitespace);
+        return ImportMirrorsFromXmlContent(File.ReadAllText(normalizedPath));
+    }
+
+    public IReadOnlyList<MavenMirrorConfiguration> ImportMirrorsFromXmlContent(string xmlContent)
+    {
+        if (string.IsNullOrWhiteSpace(xmlContent))
+        {
+            return Array.Empty<MavenMirrorConfiguration>();
+        }
+
+        var document = XDocument.Parse(xmlContent, LoadOptions.PreserveWhitespace);
         var root = document.Root ?? throw new InvalidOperationException("The mirror XML root element is invalid.");
         var elementNamespace = GetElementNamespace(root);
 
@@ -199,11 +234,6 @@ public sealed class MavenConfigurationService
     public void EnsureEditableSettingsFile(string settingsFilePath)
     {
         var normalizedPath = Path.GetFullPath(settingsFilePath.Trim());
-        if (File.Exists(normalizedPath))
-        {
-            return;
-        }
-
         Directory.CreateDirectory(Path.GetDirectoryName(normalizedPath)!);
         LoadOrCreateSettingsDocument(normalizedPath).Save(normalizedPath);
     }
@@ -211,13 +241,11 @@ public sealed class MavenConfigurationService
     public void EnsureEditableToolchainsFile(string toolchainsFilePath)
     {
         var normalizedPath = Path.GetFullPath(toolchainsFilePath.Trim());
-        if (File.Exists(normalizedPath))
-        {
-            return;
-        }
-
         Directory.CreateDirectory(Path.GetDirectoryName(normalizedPath)!);
-        CreateToolchainsDocument().Save(normalizedPath);
+        var document = File.Exists(normalizedPath)
+            ? XDocument.Load(normalizedPath, LoadOptions.PreserveWhitespace)
+            : CreateToolchainsDocument();
+        document.Save(normalizedPath);
     }
 
     private static MavenMirrorConfiguration? ReadMirror(XElement element, XNamespace elementNamespace)
@@ -373,4 +401,9 @@ public sealed class MavenConfigurationService
         root.Name.Namespace == XNamespace.None
             ? XNamespace.None
             : root.Name.Namespace;
+
+    private sealed class Utf8StringWriter : StringWriter
+    {
+        public override Encoding Encoding => Encoding.UTF8;
+    }
 }
