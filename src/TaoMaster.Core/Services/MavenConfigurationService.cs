@@ -95,20 +95,13 @@ public sealed class MavenConfigurationService
 
     public string ReadToolchainsXml(string toolchainsFilePath)
     {
-        if (string.IsNullOrWhiteSpace(toolchainsFilePath))
-        {
-            throw new InvalidOperationException("Maven toolchains.xml path cannot be empty.");
-        }
-
-        var normalizedPath = Path.GetFullPath(toolchainsFilePath.Trim());
-        Directory.CreateDirectory(Path.GetDirectoryName(normalizedPath)!);
+        var normalizedPath = NormalizeConfigurationFilePath(toolchainsFilePath, "Maven toolchains.xml");
 
         var document = File.Exists(normalizedPath)
             ? XDocument.Load(normalizedPath, LoadOptions.PreserveWhitespace)
             : CreateToolchainsDocument();
 
         var normalized = NormalizeToolchainsDocument(document);
-        normalized.Save(normalizedPath);
         return SaveDocumentToString(normalized);
     }
 
@@ -247,12 +240,7 @@ public sealed class MavenConfigurationService
 
     public void ApplyToolchainsXml(string toolchainsFilePath, string xmlContent)
     {
-        if (string.IsNullOrWhiteSpace(toolchainsFilePath))
-        {
-            throw new InvalidOperationException("Maven toolchains.xml path cannot be empty.");
-        }
-
-        var normalizedPath = Path.GetFullPath(toolchainsFilePath.Trim());
+        var normalizedPath = NormalizeConfigurationFilePath(toolchainsFilePath, "Maven toolchains.xml");
         Directory.CreateDirectory(Path.GetDirectoryName(normalizedPath)!);
         var normalizedXml = NormalizeToolchainsXml(xmlContent);
         File.WriteAllText(normalizedPath, normalizedXml, Encoding.UTF8);
@@ -260,12 +248,7 @@ public sealed class MavenConfigurationService
 
     public MavenSettingsSnapshot ReadSettingsSnapshot(string settingsFilePath)
     {
-        if (string.IsNullOrWhiteSpace(settingsFilePath))
-        {
-            throw new InvalidOperationException("Maven settings.xml path cannot be empty.");
-        }
-
-        var normalizedSettingsFilePath = Path.GetFullPath(settingsFilePath.Trim());
+        var normalizedSettingsFilePath = NormalizeConfigurationFilePath(settingsFilePath, "Maven settings.xml");
         if (!File.Exists(normalizedSettingsFilePath))
         {
             return new MavenSettingsSnapshot(
@@ -344,17 +327,12 @@ public sealed class MavenConfigurationService
         string? previousLocalRepositoryPath,
         bool migrateLocalRepository)
     {
-        if (string.IsNullOrWhiteSpace(settingsFilePath))
-        {
-            throw new InvalidOperationException("Maven settings.xml path cannot be empty.");
-        }
-
         if (string.IsNullOrWhiteSpace(localRepositoryPath))
         {
             throw new InvalidOperationException("Maven local repository path cannot be empty.");
         }
 
-        var normalizedSettingsFilePath = Path.GetFullPath(settingsFilePath.Trim());
+        var normalizedSettingsFilePath = NormalizeConfigurationFilePath(settingsFilePath, "Maven settings.xml");
         var normalizedLocalRepositoryPath = Path.GetFullPath(localRepositoryPath.Trim());
         var normalizedPreviousRepositoryPath = string.IsNullOrWhiteSpace(previousLocalRepositoryPath)
             ? null
@@ -398,14 +376,14 @@ public sealed class MavenConfigurationService
 
     public void EnsureEditableSettingsFile(string settingsFilePath)
     {
-        var normalizedPath = Path.GetFullPath(settingsFilePath.Trim());
+        var normalizedPath = NormalizeConfigurationFilePath(settingsFilePath, "Maven settings.xml");
         Directory.CreateDirectory(Path.GetDirectoryName(normalizedPath)!);
         LoadOrCreateSettingsDocument(normalizedPath).Save(normalizedPath);
     }
 
     public void EnsureEditableToolchainsFile(string toolchainsFilePath)
     {
-        var normalizedPath = Path.GetFullPath(toolchainsFilePath.Trim());
+        var normalizedPath = NormalizeConfigurationFilePath(toolchainsFilePath, "Maven toolchains.xml");
         Directory.CreateDirectory(Path.GetDirectoryName(normalizedPath)!);
         var document = File.Exists(normalizedPath)
             ? XDocument.Load(normalizedPath, LoadOptions.PreserveWhitespace)
@@ -607,6 +585,26 @@ public sealed class MavenConfigurationService
 
     private static string NormalizeUrl(string url) =>
         url.Trim().TrimEnd('/');
+
+    private static string NormalizeConfigurationFilePath(string filePath, string displayName)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            throw new InvalidOperationException($"{displayName} path cannot be empty.");
+        }
+
+        var trimmed = filePath.Trim();
+        var normalizedPath = Path.GetFullPath(trimmed);
+        var looksLikeDirectory = trimmed.EndsWith(Path.DirectorySeparatorChar)
+                                 || trimmed.EndsWith(Path.AltDirectorySeparatorChar);
+
+        if (looksLikeDirectory || Directory.Exists(normalizedPath))
+        {
+            throw new InvalidOperationException($"{displayName} path must point to a file, not a directory: {normalizedPath}");
+        }
+
+        return normalizedPath;
+    }
 
     private static string BuildGlobalConfigPath(string? mavenHome, string fileName)
     {

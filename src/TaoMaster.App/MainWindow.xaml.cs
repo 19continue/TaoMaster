@@ -1613,6 +1613,7 @@ public partial class MainWindow : Window
 
         try
         {
+            await System.Windows.Threading.Dispatcher.Yield(System.Windows.Threading.DispatcherPriority.Background);
             statusText = await operation();
         }
         catch (Exception ex)
@@ -1654,6 +1655,7 @@ public partial class MainWindow : Window
 
         try
         {
+            await System.Windows.Threading.Dispatcher.Yield(System.Windows.Threading.DispatcherPriority.Background);
             statusText = await operation();
         }
         catch (Exception ex)
@@ -2490,7 +2492,6 @@ public partial class MainWindow : Window
         {
             return;
         }
-
         if (selectedOption.Scope == MavenConfigurationScope.Global
             && ResolveMavenInstallationForConfiguration() is null)
         {
@@ -2500,65 +2501,43 @@ public partial class MainWindow : Window
                 "使用全局配置文件前，请先选择或激活一个 Maven 安装。"));
             return;
         }
-
-        _state = _state with
+        var previousState = _state;
+        var preferredJdkId = GetSelectedInstallationId(JdkListBox);
+        var preferredMavenId = GetSelectedInstallationId(MavenListBox);
+        var mavenHome = ResolveMavenInstallationForConfiguration()?.HomeDirectory;
+        var settingsFilePath = selectedOption.Scope == MavenConfigurationScope.User
+            ? previousState.Settings.MavenSettingsFilePath
+            : _mavenConfigurationService.ResolveSettingsFilePath(selectedOption.Scope, mavenHome);
+        var toolchainsFilePath = selectedOption.Scope == MavenConfigurationScope.User
+            ? previousState.Settings.MavenToolchainsFilePath
+            : _mavenConfigurationService.ResolveToolchainsFilePath(selectedOption.Scope, mavenHome);
+        try
         {
-            Settings = _state.Settings with
+            _state = _state with
             {
-                MavenConfigurationScope = selectedOption.Scope
-            }
-        };
-
-        ReloadMavenConfigurationFiles(
-            selectedOption.Scope,
-            selectedOption.Scope == MavenConfigurationScope.User
-                ? _state.Settings.MavenSettingsFilePath
-                : _mavenConfigurationService.ResolveSettingsFilePath(
-                    selectedOption.Scope,
-                    ResolveMavenInstallationForConfiguration()?.HomeDirectory),
-            selectedOption.Scope == MavenConfigurationScope.User
-                ? _state.Settings.MavenToolchainsFilePath
-                : _mavenConfigurationService.ResolveToolchainsFilePath(
-                    selectedOption.Scope,
-                    ResolveMavenInstallationForConfiguration()?.HomeDirectory),
-            persistState: true);
-        RefreshStateBindings(GetSelectedInstallationId(JdkListBox), GetSelectedInstallationId(MavenListBox));
-        SetStatus(FormatLocalized(
-            "Maven configuration scope set to: {0}",
-            "Maven 配置作用域已切换为：{0}",
-            selectedOption.DisplayName));
-        return;
-
-        if (_suppressConfigurationScopeSelectionChanged || MavenConfigurationScopeComboBox.SelectedItem is not ConfigurationScopeOption option)
-        {
-            return;
+                Settings = _state.Settings with
+                {
+                    MavenConfigurationScope = selectedOption.Scope
+                }
+            };
+            ReloadMavenConfigurationFiles(
+                selectedOption.Scope,
+                settingsFilePath,
+                toolchainsFilePath,
+                persistState: true);
+            RefreshStateBindings(preferredJdkId, preferredMavenId);
+            SetStatus(FormatLocalized(
+                "Maven configuration scope set to: {0}",
+                "Maven 配置作用域已切换为：{0}",
+                selectedOption.DisplayName));
         }
-
-        if (!TryResolveMavenConfigurationPaths(option.Scope, out var settingsFilePath, out var toolchainsFilePath))
+        catch (Exception ex)
         {
+            _state = previousState;
             RefreshConfigurationScopeSelector();
-            ShowValidationMessage(Localize(
-                "Select a Maven installation before using global Maven configuration files.",
-                "切换到全局 Maven 配置前，请先选择一个 Maven 安装。"));
-            return;
+            RefreshStateBindings(preferredJdkId, preferredMavenId);
+            ShowValidationMessage(ex.Message);
         }
-
-        _state = _state with
-        {
-            Settings = _state.Settings with
-            {
-                MavenConfigurationScope = option.Scope,
-                MavenSettingsFilePath = settingsFilePath,
-                MavenToolchainsFilePath = toolchainsFilePath
-            }
-        };
-
-        _stateStore.Save(_layout, _state);
-        RefreshStateBindings(GetSelectedInstallationId(JdkListBox), GetSelectedInstallationId(MavenListBox));
-        SetStatus(FormatLocalized(
-            "Maven configuration scope set to: {0}",
-            "Maven 配置作用域已切换为：{0}",
-            option.DisplayName));
     }
 
     private async void OnImportMirrorXmlClicked(object sender, RoutedEventArgs e)
